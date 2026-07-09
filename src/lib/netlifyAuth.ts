@@ -1,6 +1,5 @@
 import {
   AuthError,
-  getSettings,
   getUser,
   handleAuthCallback,
   login,
@@ -29,7 +28,12 @@ export async function initializeNetlifyIdentity() {
 
 export async function checkNetlifyIdentitySettings() {
   try {
-    await getSettings();
+    const response = await fetch("/.netlify/identity/settings", {
+      headers: { accept: "application/json" }
+    });
+    if (!response.ok) {
+      return "Netlify Identity is not enabled for this site yet.";
+    }
     return "";
   } catch (error) {
     return error instanceof Error
