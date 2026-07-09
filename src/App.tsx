@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  ArrowLeft,
   AlertTriangle,
   BarChart3,
   Database,
@@ -7,6 +8,7 @@ import {
   LockKeyhole,
   LogOut,
   PackageSearch,
+  Printer,
   RefreshCcw,
   SlidersHorizontal,
   UserPlus,
@@ -115,6 +117,7 @@ export function App() {
   const [importMessage, setImportMessage] = useState("");
   const [authLoading, setAuthLoading] = useState(() => shouldUseNetlifyIdentity());
   const [authNotice, setAuthNotice] = useState("");
+  const [selectedRepVendor, setSelectedRepVendor] = useState<string | null>(null);
 
   const transactions = ledger.transactions;
   const quality = ledger.quality;
@@ -476,7 +479,15 @@ export function App() {
               />
             )}
             {activeView === "reps" && (
-              <RepView rows={filtered} allRows={enriched} mappings={repMappings} setMappings={setRepMappings} />
+              <RepView
+                rows={filtered}
+                allRows={enriched}
+                mappings={repMappings}
+                selectedRepVendor={selectedRepVendor}
+                setMappings={setRepMappings}
+                onClearReport={() => setSelectedRepVendor(null)}
+                onSelectReport={setSelectedRepVendor}
+              />
             )}
             {activeView === "products" && (
               <ProductView
@@ -1020,18 +1031,38 @@ function RepView({
   rows,
   allRows,
   mappings,
-  setMappings
+  selectedRepVendor,
+  setMappings,
+  onClearReport,
+  onSelectReport
 }: {
   rows: SalesTransaction[];
   allRows: SalesTransaction[];
   mappings: SalesRepMapping[];
+  selectedRepVendor: string | null;
   setMappings: (mappings: SalesRepMapping[]) => void;
+  onClearReport: () => void;
+  onSelectReport: (name: string) => void;
 }) {
   const data = repPerformance(rows);
   const reps = optionValues(allRows, "salesRepVendor");
+  const selectedRows = selectedRepVendor
+    ? rows.filter((row) => (row.salesRepVendor || "Unassigned") === selectedRepVendor)
+    : [];
+  const selectedMapping = selectedRepVendor
+    ? mappings.find((mapping) => mapping.salesRepVendor === selectedRepVendor)
+    : undefined;
 
   return (
     <section className="view-stack">
+      {selectedRepVendor ? (
+        <RepVendorReport
+          entityName={selectedRepVendor}
+          mapping={selectedMapping}
+          rows={selectedRows}
+          onBack={onClearReport}
+        />
+      ) : null}
       <ChartCard title="Revenue Trend for Current Rep / Vendor Filter">
         <RevenueArea data={timeSeries(rows, "month")} />
       </ChartCard>
@@ -1053,7 +1084,11 @@ function RepView({
           <tbody>
             {data.map((row) => (
               <tr key={row.name}>
-                <td>{row.name}</td>
+                <td>
+                  <button className="text-action" onClick={() => onSelectReport(row.name)}>
+                    {row.name}
+                  </button>
+                </td>
                 <td>{formatCurrency(row.revenue)}</td>
                 <td>{formatNumber(row.quantity)}</td>
                 <td>{row.transactions.toLocaleString()}</td>
@@ -1068,6 +1103,139 @@ function RepView({
       </div>
       <MappingEditor reps={reps} mappings={mappings} setMappings={setMappings} />
     </section>
+  );
+}
+
+function RepVendorReport({
+  entityName,
+  mapping,
+  rows,
+  onBack
+}: {
+  entityName: string;
+  mapping?: SalesRepMapping;
+  rows: SalesTransaction[];
+  onBack: () => void;
+}) {
+  const metrics = kpis(rows);
+  const range = dateRange(rows);
+  const weekly = timeSeries(rows, "week").slice(-10);
+  const topClients = customerPerformance(rows).slice(0, 10);
+  const topProducts = productPerformance(rows).slice(0, 10);
+  const entityType =
+    mapping?.salesEntityType ??
+    rows.find((row) => row.salesEntityType && row.salesEntityType !== "Unknown")?.salesEntityType ??
+    "Rep / Distributor";
+  const reportTitle = `${entityName} weekly sales report`;
+
+  function printReport() {
+    document.title = reportTitle;
+    window.print();
+  }
+
+  return (
+    <article className="rep-report" aria-label={reportTitle}>
+      <div className="report-toolbar no-print">
+        <button className="ghost-button" onClick={onBack}>
+          <ArrowLeft size={18} />
+          Back
+        </button>
+        <button className="upload-button" onClick={printReport}>
+          <Printer size={18} />
+          Save PDF
+        </button>
+      </div>
+      <div className="report-page">
+        <div className="report-header">
+          <div>
+            <p className="eyebrow">{entityType}</p>
+            <h2>{entityName}</h2>
+            <p className="subtle">
+              Weekly sales report
+              {range ? ` | ${range.start} to ${range.end}` : ""}
+              {mapping?.territory ? ` | ${mapping.territory}` : ""}
+            </p>
+          </div>
+          <img src="/evologics-logo-wide.png" alt="Evologics" />
+        </div>
+
+        {!rows.length ? (
+          <SoftEmpty text="No sales rows match this rep/distributor under the current filters." />
+        ) : (
+          <>
+            <div className="kpi-grid compact">
+              <Kpi label="Sales" value={formatCurrency(metrics.revenue)} />
+              <Kpi label="Quantity" value={formatNumber(metrics.quantity)} />
+              <Kpi label="Customers" value={metrics.uniqueCustomers.toLocaleString()} />
+              <Kpi label="Products" value={metrics.uniqueSkus.toLocaleString()} />
+              <Kpi label="Line items" value={metrics.transactionCount.toLocaleString()} />
+              <Kpi label="Avg revenue / line" value={formatCurrency(metrics.averageRevenuePerLine)} />
+            </div>
+
+            <div className="dashboard-grid report-grid">
+              <ChartCard title="Weekly Sales Trend">
+                <RevenueBar data={weekly} />
+              </ChartCard>
+              <ChartCard title="Top Clients">
+                <RevenueBar data={topClients.slice(0, 8)} nameKey="name" />
+              </ChartCard>
+            </div>
+
+            <div className="report-tables">
+              <div className="table-card">
+                <h2>Top Clients</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Sales</th>
+                      <th>Qty</th>
+                      <th>Lines</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topClients.map((row) => (
+                      <tr key={row.name}>
+                        <td>{row.name}</td>
+                        <td>{formatCurrency(row.revenue)}</td>
+                        <td>{formatNumber(row.quantity)}</td>
+                        <td>{row.transactions.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="table-card">
+                <h2>Top Products</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Description</th>
+                      <th>Sales</th>
+                      <th>Qty</th>
+                      <th>Clients</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topProducts.map((row) => (
+                      <tr key={row.sku}>
+                        <td>{row.sku}</td>
+                        <td>{row.description}</td>
+                        <td>{formatCurrency(row.revenue)}</td>
+                        <td>{formatNumber(row.quantity)}</td>
+                        <td>{row.topCustomers}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </article>
   );
 }
 

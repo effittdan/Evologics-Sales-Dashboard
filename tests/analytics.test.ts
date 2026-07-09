@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createEmptyImportLedger,
   partitionNewTransactions,
-  salesTransactionKey
+  salesTransactionKey,
+  timeSeries
 } from "../src/lib/analytics";
 import type { SalesTransaction } from "../src/types";
 
@@ -37,6 +38,19 @@ describe("import ledger duplicate prevention", () => {
 
     expect(partition.accepted).toEqual([newRow]);
     expect(partition.skippedDuplicateRows).toBe(1);
+  });
+});
+
+describe("weekly reporting", () => {
+  it("groups sales into Monday-starting weeks", () => {
+    const sunday = makeTransaction({ transactionDate: "2026-07-05", revenue: 100 });
+    const monday = makeTransaction({ transactionDate: "2026-07-06", revenue: 250 });
+    const friday = makeTransaction({ transactionDate: "2026-07-10", revenue: 400 });
+
+    expect(timeSeries([sunday, monday, friday], "week")).toMatchObject([
+      { period: "2026-06-29", revenue: 100 },
+      { period: "2026-07-06", revenue: 650 }
+    ]);
   });
 });
 

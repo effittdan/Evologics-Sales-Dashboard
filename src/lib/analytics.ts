@@ -199,7 +199,9 @@ export function kpis(rows: SalesTransaction[]) {
   };
 }
 
-export function timeSeries(rows: SalesTransaction[], grain: "month" | "quarter" | "year") {
+export type TimeSeriesGrain = "week" | "month" | "quarter" | "year";
+
+export function timeSeries(rows: SalesTransaction[], grain: TimeSeriesGrain) {
   const grouped = groupBy(rows, (row) => periodKey(row.transactionDate, grain));
   return Object.entries(grouped)
     .map(([period, periodRows]) => ({
@@ -347,9 +349,10 @@ function matches(value: string | undefined, allowed: string[]) {
   return allowed.length === 0 || allowed.includes(value || "");
 }
 
-function periodKey(dateValue: string, grain: "month" | "quarter" | "year") {
+function periodKey(dateValue: string, grain: TimeSeriesGrain) {
   const date = parseDate(dateValue);
   const year = date.getUTCFullYear();
+  if (grain === "week") return isoDate(startOfWeek(date));
   if (grain === "year") return String(year);
   if (grain === "quarter") return `${year}-Q${Math.floor(date.getUTCMonth() / 3) + 1}`;
   return `${year}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -366,4 +369,10 @@ function parseDate(dateValue: string) {
 
 function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function startOfWeek(date: Date) {
+  const day = date.getUTCDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + mondayOffset));
 }
