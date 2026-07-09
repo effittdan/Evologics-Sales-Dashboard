@@ -65,6 +65,7 @@ import {
 } from "./lib/importers";
 import {
   checkNetlifyIdentitySettings,
+  createNetlifyIdentityAccount,
   initializeNetlifyIdentity,
   loginWithNetlifyIdentity,
   logoutNetlifyIdentity,
@@ -303,6 +304,29 @@ export function App() {
     return "";
   }
 
+  async function createApprovedAccount(email: string, password: string) {
+    if (!netlifyIdentityEnabled) return "Account creation is only available on the deployed site.";
+    const approvedUser = approvedUserForEmail(users, email);
+    if (!approvedUser || approvedUser.status !== "Active") {
+      return "This email is not approved for the Evologics dashboard.";
+    }
+
+    const result = await createNetlifyIdentityAccount(email, password, approvedUser.name);
+    if (!result.user) return result.error || "Netlify Identity account creation failed.";
+    if (result.needsConfirmation) {
+      return "Account created. Check that email inbox for the Netlify confirmation link, then sign in here.";
+    }
+
+    const signedInAt = new Date().toISOString();
+    setUsers((current) =>
+      current.map((item) =>
+        item.id === approvedUser.id ? { ...item, lastLoginAt: signedInAt } : item
+      )
+    );
+    setSession({ userId: approvedUser.id, signedInAt, provider: "netlify" });
+    return "";
+  }
+
   async function signOut() {
     if (netlifyIdentityEnabled) {
       await logoutNetlifyIdentity();
@@ -340,6 +364,7 @@ export function App() {
       <LoginPanel
         authNotice={authNotice}
         isNetlifyIdentity={netlifyIdentityEnabled}
+        onCreateAccount={createApprovedAccount}
         onSignIn={signIn}
       />
     );
@@ -497,21 +522,45 @@ function LoadingAuthPanel() {
 function LoginPanel({
   authNotice,
   isNetlifyIdentity,
+  onCreateAccount,
   onSignIn
 }: {
   authNotice: string;
   isNetlifyIdentity: boolean;
+  onCreateAccount: (email: string, password: string) => Promise<string>;
   onSignIn: (email: string, password: string) => Promise<string>;
 }) {
   const [email, setEmail] = useState("theresa@evologicsamerica.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
+    setMessage("");
+    setIsSubmitting(true);
     const signInError = await onSignIn(email, password);
     if (signInError) setError(signInError);
+    setIsSubmitting(false);
+  }
+
+  async function createAccount() {
+    setError("");
+    setMessage("");
+    if (password.length < 8) {
+      setError("Use a password with at least 8 characters.");
+      return;
+    }
+    setIsSubmitting(true);
+    const accountMessage = await onCreateAccount(email, password);
+    if (accountMessage.startsWith("Account created")) {
+      setMessage(accountMessage);
+    } else if (accountMessage) {
+      setError(accountMessage);
+    }
+    setIsSubmitting(false);
   }
 
   return (
@@ -550,11 +599,23 @@ function LoginPanel({
             />
           </label>
           {authNotice ? <div className="form-note">{authNotice}</div> : null}
+          {message ? <div className="form-note">{message}</div> : null}
           {error ? <div className="form-error">{error}</div> : null}
-          <button className="upload-button login-submit" type="submit">
+          <button className="upload-button login-submit" type="submit" disabled={isSubmitting}>
             <LockKeyhole size={18} />
             Sign in
           </button>
+          {isNetlifyIdentity ? (
+            <button
+              className="ghost-button login-submit"
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => void createAccount()}
+            >
+              <UserPlus size={18} />
+              Create approved account
+            </button>
+          ) : null}
         </form>
         <p className="security-note">
           {isNetlifyIdentity

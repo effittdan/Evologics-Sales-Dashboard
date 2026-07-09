@@ -286,6 +286,11 @@ h2 {
   cursor: not-allowed;
 }
 
+.upload-button:disabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+}
+
 .icon-button {
   width: 42px;
   justify-content: center;

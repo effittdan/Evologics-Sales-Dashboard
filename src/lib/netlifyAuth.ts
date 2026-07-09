@@ -4,13 +4,15 @@ import {
   handleAuthCallback,
   login,
   logout,
-  onAuthChange
+  onAuthChange,
+  signup
 } from "@netlify/identity";
 
 export type NetlifyAuthUser = {
   id?: string;
   email?: string;
   name?: string;
+  confirmedAt?: string;
   app_metadata?: {
     roles?: string[];
   };
@@ -60,6 +62,29 @@ export async function loginWithNetlifyIdentity(email: string, password: string) 
     return {
       user: null,
       error: error instanceof Error ? error.message : "Netlify Identity login failed."
+    };
+  }
+}
+
+export async function createNetlifyIdentityAccount(email: string, password: string, name: string) {
+  try {
+    const user = normalizeNetlifyUser(await signup(email, password, { full_name: name }));
+    return { user, needsConfirmation: !user?.confirmedAt, error: "" };
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return {
+        user: null,
+        needsConfirmation: false,
+        error:
+          error.status === 422
+            ? "That account could not be created. It may already exist, or the password may not meet Netlify requirements."
+            : error.message
+      };
+    }
+    return {
+      user: null,
+      needsConfirmation: false,
+      error: error instanceof Error ? error.message : "Netlify Identity account creation failed."
     };
   }
 }
