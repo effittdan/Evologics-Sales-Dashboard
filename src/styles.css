@@ -533,6 +533,9 @@ select[multiple] {
 }
 
 .text-action {
+  appearance: none;
+  border: 0;
+  border-radius: 0;
   padding: 0;
   color: var(--primary);
   background: transparent;
@@ -545,6 +548,27 @@ select[multiple] {
 
 .text-action:hover {
   color: var(--secondary);
+}
+
+.text-action.selected {
+  color: #8a6b1f;
+  text-decoration-color: var(--gold);
+}
+
+.text-action.selected::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  vertical-align: middle;
+}
+
+.text-action:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 
 .rep-report {

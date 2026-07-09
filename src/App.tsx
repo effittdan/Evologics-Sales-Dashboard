@@ -1208,7 +1208,11 @@ function RepView({
             {data.map((row) => (
               <tr key={row.name}>
                 <td>
-                  <button className="text-action" onClick={() => onSelectReport(row.name)}>
+                  <button
+                    className={`text-action ${selectedRepVendor === row.name ? "selected" : ""}`}
+                    aria-pressed={selectedRepVendor === row.name}
+                    onClick={() => onSelectReport(row.name)}
+                  >
                     {row.name}
                   </button>
                 </td>
