@@ -485,7 +485,7 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-lockup">
-          <img src="/evologics-logo-wide.png" alt="Evologics" />
+          <img src="/evologics-logo-wide-white.png" alt="Evologics" />
           <span>Sales Analytics</span>
         </div>
         <nav className="nav-list">
