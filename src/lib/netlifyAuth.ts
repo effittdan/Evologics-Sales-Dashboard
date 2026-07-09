@@ -28,12 +28,13 @@ export async function initializeNetlifyIdentity() {
 
 export async function checkNetlifyIdentitySettings() {
   try {
-    const response = await fetch("/.netlify/identity/settings", {
+    const response = await fetch("/.netlify/identity", {
       headers: { accept: "application/json" }
     });
-    if (!response.ok) {
+    if (response.status === 404) {
       return "Netlify Identity is not enabled for this site yet.";
     }
+    if (response.ok || response.status === 401 || response.status === 405) return "";
     return "";
   } catch (error) {
     return error instanceof Error
