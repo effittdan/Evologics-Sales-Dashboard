@@ -51,6 +51,7 @@ import {
 } from "./lib/analytics";
 import {
   activeSessionUser,
+  approvedUserForEmail,
   authenticateUser,
   createUserRecord,
   initializeUsers
@@ -62,6 +63,13 @@ import {
   parseNetSuiteSavedSearchXML,
   parseNetSuiteSpreadsheetMLReport
 } from "./lib/importers";
+import {
+  initializeNetlifyIdentity,
+  loginWithNetlifyIdentity,
+  logoutNetlifyIdentity,
+  shouldUseNetlifyIdentity,
+  watchNetlifyIdentity
+} from "./lib/netlifyAuth";
 import type {
   AppSession,
   AppUser,
@@ -100,13 +108,16 @@ export function App() {
     initializeUsers(loadStored<AppUser[] | undefined>(storageKeys.users, undefined))
   );
   const [session, setSession] = useState<AppSession | null>(() =>
-    loadStored<AppSession | null>(storageKeys.session, null)
+    shouldUseNetlifyIdentity() ? null : loadStored<AppSession | null>(storageKeys.session, null)
   );
   const [importMessage, setImportMessage] = useState("");
+  const [authLoading, setAuthLoading] = useState(() => shouldUseNetlifyIdentity());
+  const [authNotice, setAuthNotice] = useState("");
 
   const transactions = ledger.transactions;
   const quality = ledger.quality;
   const currentUser = activeSessionUser(users, session);
+  const netlifyIdentityEnabled = shouldUseNetlifyIdentity();
 
   useEffect(() => {
     localStorage.setItem(storageKeys.ledger, JSON.stringify(ledger));
@@ -125,12 +136,56 @@ export function App() {
   }, [users]);
 
   useEffect(() => {
+    if (netlifyIdentityEnabled) return;
     if (session) {
       localStorage.setItem(storageKeys.session, JSON.stringify(session));
     } else {
       localStorage.removeItem(storageKeys.session);
     }
-  }, [session]);
+  }, [netlifyIdentityEnabled, session]);
+
+  useEffect(() => {
+    if (!netlifyIdentityEnabled) {
+      setAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    function applyNetlifyUser(email?: string | null) {
+      const approvedUser = approvedUserForEmail(users, email);
+      if (!approvedUser) {
+        setSession(null);
+        return;
+      }
+      setSession({
+        userId: approvedUser.id,
+        signedInAt: new Date().toISOString(),
+        provider: "netlify"
+      });
+    }
+
+    initializeNetlifyIdentity()
+      .then((netlifyUser) => {
+        if (!mounted) return;
+        applyNetlifyUser(netlifyUser?.email);
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        setAuthNotice(error instanceof Error ? error.message : "Netlify Identity is not configured.");
+      })
+      .finally(() => {
+        if (mounted) setAuthLoading(false);
+      });
+
+    const unsubscribe = watchNetlifyIdentity((netlifyUser) => {
+      applyNetlifyUser(netlifyUser?.email);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [netlifyIdentityEnabled, users]);
 
   const enriched = useMemo(
     () => applyEnrichments(transactions, repMappings, skuEnrichments),
@@ -211,17 +266,38 @@ export function App() {
   }
 
   async function signIn(email: string, password: string) {
+    if (netlifyIdentityEnabled) {
+      const result = await loginWithNetlifyIdentity(email, password);
+      if (!result.user) return result.error || "Netlify Identity sign-in failed.";
+      const approvedUser = approvedUserForEmail(users, result.user.email);
+      if (!approvedUser) {
+        await logoutNetlifyIdentity();
+        return "This Netlify user is not approved for the Evologics dashboard.";
+      }
+      const signedInAt = new Date().toISOString();
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === approvedUser.id ? { ...item, lastLoginAt: signedInAt } : item
+        )
+      );
+      setSession({ userId: approvedUser.id, signedInAt, provider: "netlify" });
+      return "";
+    }
+
     const user = await authenticateUser(users, email, password);
-    if (!user) return false;
+    if (!user) return "Email or password did not match an active user.";
     const signedInAt = new Date().toISOString();
     setUsers((current) =>
       current.map((item) => (item.id === user.id ? { ...item, lastLoginAt: signedInAt } : item))
     );
-    setSession({ userId: user.id, signedInAt });
-    return true;
+    setSession({ userId: user.id, signedInAt, provider: "local" });
+    return "";
   }
 
-  function signOut() {
+  async function signOut() {
+    if (netlifyIdentityEnabled) {
+      await logoutNetlifyIdentity();
+    }
     setSession(null);
     setActiveView("overview");
   }
@@ -246,8 +322,18 @@ export function App() {
     );
   }
 
+  if (authLoading) {
+    return <LoadingAuthPanel />;
+  }
+
   if (!currentUser) {
-    return <LoginPanel onSignIn={signIn} />;
+    return (
+      <LoginPanel
+        authNotice={authNotice}
+        isNetlifyIdentity={netlifyIdentityEnabled}
+        onSignIn={signIn}
+      />
+    );
   }
 
   return (
@@ -315,7 +401,11 @@ export function App() {
             <button className="ghost-button" onClick={clearAllData} disabled={!enriched.length}>
               Clear
             </button>
-            <button className="ghost-button icon-button" onClick={signOut} aria-label="Sign out">
+            <button
+              className="ghost-button icon-button"
+              onClick={() => void signOut()}
+              aria-label="Sign out"
+            >
               <LogOut size={18} />
             </button>
           </div>
@@ -333,6 +423,7 @@ export function App() {
         {activeView === "users" ? (
           <UserList
             currentUser={currentUser}
+            isNetlifyIdentity={netlifyIdentityEnabled}
             users={users}
             onAddUser={addUser}
             onToggleStatus={toggleUserStatus}
@@ -376,7 +467,33 @@ export function App() {
   );
 }
 
-function LoginPanel({ onSignIn }: { onSignIn: (email: string, password: string) => Promise<boolean> }) {
+function LoadingAuthPanel() {
+  return (
+    <main className="login-shell">
+      <section className="login-panel">
+        <div className="login-brand">
+          <img src="/evologics-logo-wide.png" alt="Evologics" />
+          <span>Sales Analytics</span>
+        </div>
+        <div>
+          <p className="eyebrow">Netlify Identity</p>
+          <h1>Checking session</h1>
+          <p className="subtle">Connecting to the deployed authentication service.</p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LoginPanel({
+  authNotice,
+  isNetlifyIdentity,
+  onSignIn
+}: {
+  authNotice: string;
+  isNetlifyIdentity: boolean;
+  onSignIn: (email: string, password: string) => Promise<string>;
+}) {
   const [email, setEmail] = useState("theresa@evologicsamerica.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -384,8 +501,8 @@ function LoginPanel({ onSignIn }: { onSignIn: (email: string, password: string) 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    const signedIn = await onSignIn(email, password);
-    if (!signedIn) setError("Email or password did not match an active user.");
+    const signInError = await onSignIn(email, password);
+    if (signInError) setError(signInError);
   }
 
   return (
@@ -396,10 +513,12 @@ function LoginPanel({ onSignIn }: { onSignIn: (email: string, password: string) 
           <span>Sales Analytics</span>
         </div>
         <div>
-          <p className="eyebrow">Secure local MVP</p>
+          <p className="eyebrow">{isNetlifyIdentity ? "Netlify Identity" : "Secure local MVP"}</p>
           <h1>Sign in</h1>
           <p className="subtle">
-            Access imports, analytics, and the local user directory for this browser.
+            {isNetlifyIdentity
+              ? "Access the deployed Evologics sales dashboard with Netlify authentication."
+              : "Access imports, analytics, and the local user directory for this browser."}
           </p>
         </div>
         <form className="login-form" onSubmit={(event) => void submit(event)}>
@@ -421,6 +540,7 @@ function LoginPanel({ onSignIn }: { onSignIn: (email: string, password: string) 
               onChange={(event) => setPassword(event.target.value)}
             />
           </label>
+          {authNotice ? <div className="form-note">{authNotice}</div> : null}
           {error ? <div className="form-error">{error}</div> : null}
           <button className="upload-button login-submit" type="submit">
             <LockKeyhole size={18} />
@@ -428,8 +548,9 @@ function LoginPanel({ onSignIn }: { onSignIn: (email: string, password: string) 
           </button>
         </form>
         <p className="security-note">
-          Local prototype auth only. Production access should move to a server-backed identity
-          provider before live company use.
+          {isNetlifyIdentity
+            ? "User accounts and passwords are handled by Netlify Identity on the deployed site."
+            : "Local prototype auth only. Production access should move to a server-backed identity provider before live company use."}
         </p>
       </section>
     </main>
@@ -438,11 +559,13 @@ function LoginPanel({ onSignIn }: { onSignIn: (email: string, password: string) 
 
 function UserList({
   currentUser,
+  isNetlifyIdentity,
   users,
   onAddUser,
   onToggleStatus
 }: {
   currentUser: AppUser;
+  isNetlifyIdentity: boolean;
   users: AppUser[];
   onAddUser: (input: {
     name: string;
@@ -483,7 +606,11 @@ function UserList({
         <div>
           <p className="eyebrow">Access</p>
           <h2>User list</h2>
-          <p className="subtle">Local users for this dashboard prototype.</p>
+          <p className="subtle">
+            {isNetlifyIdentity
+              ? "Approved dashboard users mapped to Netlify Identity accounts."
+              : "Local users for this dashboard prototype."}
+          </p>
         </div>
         <div className="user-chip">
           <span>{users.filter((user) => user.status === "Active").length} active</span>
@@ -516,19 +643,29 @@ function UserList({
                 </td>
                 <td>{user.lastLoginAt ? formatShortDateTime(user.lastLoginAt) : "Not yet"}</td>
                 <td>
-                  <button
-                    className="table-action"
-                    disabled={user.id === currentUser.id}
-                    onClick={() => onToggleStatus(user.id)}
-                  >
-                    {user.status === "Active" ? "Deactivate" : "Activate"}
-                  </button>
+                  {isNetlifyIdentity ? (
+                    <span className="subtle">Manage in Netlify</span>
+                  ) : (
+                    <button
+                      className="table-action"
+                      disabled={user.id === currentUser.id}
+                      onClick={() => onToggleStatus(user.id)}
+                    >
+                      {user.status === "Active" ? "Deactivate" : "Activate"}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {isNetlifyIdentity ? (
+        <div className="soft-empty">
+          Invite and password changes are managed in Netlify Identity. This table is the dashboard's
+          approved access directory.
+        </div>
+      ) : (
       <form className="user-form" onSubmit={(event) => void submit(event)}>
         <div className="form-title">
           <UserPlus size={18} />
@@ -567,6 +704,7 @@ function UserList({
         </button>
         {message ? <div className="form-note">{message}</div> : null}
       </form>
+      )}
     </section>
   );
 }

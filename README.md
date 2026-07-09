@@ -37,8 +37,15 @@ Import history is stored locally in the browser. Re-importing the exact same fil
 
 Duplicate-looking rows inside the same newly imported file are preserved because NetSuite can legitimately export separate line items that appear identical.
 
-## Local Login Prototype
+## Authentication
 
-The dashboard includes a local sign-in panel and browser-stored user list for MVP workflow testing. Seeded users are split between `administrator` and `user` roles, and passwords are stored as browser-side hashes, not plaintext.
+The deployed dashboard uses Netlify Identity through `@netlify/identity`. Approved users are split between `administrator` and `user` roles. Netlify Identity stores production credentials; the app only keeps the approved access directory and current session mapping.
 
-This is not production authentication. Before live company use, move users, password handling, sessions, roles, and audit logs to a server-backed identity provider or database.
+Localhost keeps a browser-only fallback so the dashboard can still be developed without Netlify Identity. The fallback stores password hashes, not plaintext.
+
+Netlify setup checklist:
+
+- Enable Identity for `https://evo-sales-dashboard.netlify.app/`.
+- Set registration to invite-only.
+- Invite the approved users through Netlify Identity, or have them accept Identity invites.
+- Keep the `identity-validate` and `identity-signup` functions deployed so unapproved emails are rejected and approved roles are assigned.

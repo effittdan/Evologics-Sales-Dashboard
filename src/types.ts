@@ -116,4 +116,5 @@ export type AppUser = {
 export type AppSession = {
   userId: string;
   signedInAt: string;
+  provider: "local" | "netlify";
 };

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   activeSessionUser,
+  approvedUserForEmail,
   authenticateUser,
   createUserRecord,
   initializeUsers,
   seedUsers
 } from "../src/lib/auth";
+import { shouldUseNetlifyIdentity } from "../src/lib/netlifyAuth";
 
 describe("local auth", () => {
   it("seeds the requested Evologics users without plaintext passwords", () => {
@@ -61,7 +63,18 @@ describe("local auth", () => {
 
   it("finds the active session user", () => {
     const user = seedUsers[0];
-    expect(activeSessionUser([user], { userId: user.id, signedInAt: new Date().toISOString() }))
+    expect(activeSessionUser([user], { userId: user.id, signedInAt: new Date().toISOString(), provider: "local" }))
       .toMatchObject({ email: user.email });
+  });
+
+  it("looks up approved users by email for Netlify Identity sessions", () => {
+    expect(approvedUserForEmail(seedUsers, "DAN@EFFITT.COM")).toMatchObject({
+      name: "Dan Hong",
+      role: "administrator"
+    });
+  });
+
+  it("uses local fallback auth only on localhost", () => {
+    expect(shouldUseNetlifyIdentity()).toBe(false);
   });
 });

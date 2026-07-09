@@ -112,6 +112,11 @@ export function activeSessionUser(users: AppUser[], session?: AppSession | null)
   return users.find((user) => user.id === session.userId && user.status === "Active");
 }
 
+export function approvedUserForEmail(users: AppUser[], email?: string | null) {
+  if (!email) return undefined;
+  return users.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
+}
+
 export async function hashPassword(password: string) {
   const bytes = new TextEncoder().encode(password);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
