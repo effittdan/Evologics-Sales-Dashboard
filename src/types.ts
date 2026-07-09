@@ -50,11 +50,17 @@ export type ParsedSalesRows = {
 };
 
 export type ImportQualitySummary = {
+  batchId: string;
   sourceFile: string;
   sourceReportType: SourceReportType;
   sourceSheetName?: string;
+  importedAt: string;
+  fileFingerprint: string;
   parsedRowCount: number;
   transactionCount: number;
+  acceptedTransactionCount: number;
+  skippedDuplicateRows: number;
+  skippedDuplicateFile: boolean;
   excludedTotalRows: number;
   excludedGroupRows: number;
   parseErrors: string[];
@@ -69,6 +75,14 @@ export type ImportQualitySummary = {
 export type ImportResult = {
   transactions: SalesTransaction[];
   quality: ImportQualitySummary;
+};
+
+export type ImportLedger = {
+  version: 1;
+  transactions: SalesTransaction[];
+  quality: ImportQualitySummary[];
+  importedFileFingerprints: string[];
+  importedTransactionKeys: string[];
 };
 
 export type SalesRepMapping = {

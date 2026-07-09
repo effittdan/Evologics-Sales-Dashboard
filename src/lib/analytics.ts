@@ -1,4 +1,5 @@
 import type {
+  ImportLedger,
   ImportQualitySummary,
   ParsedSalesRows,
   SalesTransaction,
@@ -36,17 +37,31 @@ export const emptyFilters: DashboardFilters = {
 
 export function buildImportQualitySummary(
   parsed: ParsedSalesRows,
-  transactions: SalesTransaction[]
+  transactions: SalesTransaction[],
+  options: {
+    batchId: string;
+    importedAt: string;
+    fileFingerprint: string;
+    acceptedTransactionCount?: number;
+    skippedDuplicateRows?: number;
+    skippedDuplicateFile?: boolean;
+  }
 ): ImportQualitySummary {
   const transactionRange = dateRange(transactions);
   const duplicateRowCount = countDuplicateRows(transactions);
 
   return {
+    batchId: options.batchId,
     sourceFile: parsed.sourceFile,
     sourceReportType: parsed.sourceReportType,
     sourceSheetName: parsed.sourceSheetName,
+    importedAt: options.importedAt,
+    fileFingerprint: options.fileFingerprint,
     parsedRowCount: parsed.rows.length,
     transactionCount: transactions.length,
+    acceptedTransactionCount: options.acceptedTransactionCount ?? transactions.length,
+    skippedDuplicateRows: options.skippedDuplicateRows ?? 0,
+    skippedDuplicateFile: options.skippedDuplicateFile ?? false,
     excludedTotalRows: parsed.excludedTotalRows,
     excludedGroupRows: parsed.excludedGroupRows,
     parseErrors: parsed.parseErrors,
@@ -56,6 +71,48 @@ export function buildImportQualitySummary(
     missingSalesRepVendorCount: transactions.filter((row) => !row.salesRepVendor).length,
     missingProductClassCount: transactions.filter((row) => !row.productClass).length,
     missingStateCount: transactions.filter((row) => !row.shippingState).length
+  };
+}
+
+export function createEmptyImportLedger(): ImportLedger {
+  return {
+    version: 1,
+    transactions: [],
+    quality: [],
+    importedFileFingerprints: [],
+    importedTransactionKeys: []
+  };
+}
+
+export function salesTransactionKey(row: SalesTransaction) {
+  return [
+    row.transactionDate,
+    row.documentNumber,
+    row.poNumber ?? "",
+    row.customerName,
+    row.sku,
+    row.productDescription,
+    row.quantity,
+    row.unitPrice,
+    row.revenue,
+    row.transactionType,
+    row.physicianId ?? "",
+    row.patient ?? "",
+    row.salesRepVendor ?? "",
+    row.shippingState ?? ""
+  ]
+    .map((value) => String(value).trim().toLowerCase())
+    .join("|");
+}
+
+export function partitionNewTransactions(
+  rows: SalesTransaction[],
+  existingKeys: Set<string>
+) {
+  const accepted = rows.filter((row) => !existingKeys.has(salesTransactionKey(row)));
+  return {
+    accepted,
+    skippedDuplicateRows: rows.length - accepted.length
   };
 }
 

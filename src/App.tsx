@@ -28,6 +28,7 @@ import {
   applyFilters,
   buildImportQualitySummary,
   countDuplicateRows,
+  createEmptyImportLedger,
   customerPerformance,
   dateRange,
   emptyFilters,
@@ -36,9 +37,11 @@ import {
   formatPercent,
   kpis,
   optionValues,
+  partitionNewTransactions,
   productPerformance,
   repPerformance,
   resolveDateRange,
+  salesTransactionKey,
   timeSeries,
   topByRevenue,
   type DashboardFilters
@@ -51,6 +54,7 @@ import {
   parseNetSuiteSpreadsheetMLReport
 } from "./lib/importers";
 import type {
+  ImportLedger,
   ImportQualitySummary,
   SalesEntityType,
   SalesRepMapping,
@@ -60,13 +64,15 @@ import type {
 
 const chartColors = ["#1F4F45", "#4F7D6D", "#C9B27E", "#7B9C8D", "#AAB7BA"];
 const storageKeys = {
+  ledger: "evologics-import-ledger",
   reps: "evologics-sales-rep-mappings",
   skus: "evologics-sku-enrichments"
 };
 
 export function App() {
-  const [transactions, setTransactions] = useState<SalesTransaction[]>([]);
-  const [quality, setQuality] = useState<ImportQualitySummary[]>([]);
+  const [ledger, setLedger] = useState<ImportLedger>(() =>
+    loadStored(storageKeys.ledger, createEmptyImportLedger())
+  );
   const [filters, setFilters] = useState<DashboardFilters>(emptyFilters);
   const [activeView, setActiveView] = useState("overview");
   const [trendGrain, setTrendGrain] = useState<"month" | "quarter" | "year">("month");
@@ -77,6 +83,13 @@ export function App() {
     loadStored(storageKeys.skus, [])
   );
   const [importMessage, setImportMessage] = useState("");
+
+  const transactions = ledger.transactions;
+  const quality = ledger.quality;
+
+  useEffect(() => {
+    localStorage.setItem(storageKeys.ledger, JSON.stringify(ledger));
+  }, [ledger]);
 
   useEffect(() => {
     localStorage.setItem(storageKeys.reps, JSON.stringify(repMappings));
@@ -103,9 +116,14 @@ export function App() {
     const nextTransactions: SalesTransaction[] = [];
     const nextQuality: ImportQualitySummary[] = [];
     const messages: string[] = [];
+    const existingFileFingerprints = new Set(ledger.importedFileFingerprints);
+    const existingTransactionKeys = new Set(ledger.importedTransactionKeys);
 
     for (const file of Array.from(files)) {
       const text = await file.text();
+      const fileFingerprint = await fingerprintFile(file.name, text);
+      const importedAt = new Date().toISOString();
+      const batchId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const lowerName = file.name.toLowerCase();
       const parsed = isSpreadsheetMLExport(text)
         ? parseNetSuiteSpreadsheetMLReport(file.name, text)
@@ -113,19 +131,48 @@ export function App() {
           ? parseNetSuiteSavedSearchCSV(file.name, text)
           : parseNetSuiteSavedSearchXML(file.name, text);
       const normalized = normalizeSalesTransactionRows(parsed.rows);
-      nextTransactions.push(...normalized);
-      nextQuality.push(buildImportQualitySummary(parsed, normalized));
-      messages.push(`${file.name}: ${normalized.length.toLocaleString()} transaction lines`);
+      const skippedDuplicateFile = existingFileFingerprints.has(fileFingerprint);
+      const existingKeysBeforeFile = new Set(existingTransactionKeys);
+      const duplicatePartition = skippedDuplicateFile
+        ? { accepted: [], skippedDuplicateRows: normalized.length }
+        : partitionNewTransactions(normalized, existingKeysBeforeFile);
+      const { accepted, skippedDuplicateRows } = duplicatePartition;
+
+      if (!skippedDuplicateFile) {
+        nextTransactions.push(...accepted);
+        existingFileFingerprints.add(fileFingerprint);
+        accepted.forEach((row) => existingTransactionKeys.add(salesTransactionKey(row)));
+      }
+
+      nextQuality.push(
+        buildImportQualitySummary(parsed, normalized, {
+          batchId,
+          importedAt,
+          fileFingerprint,
+          acceptedTransactionCount: accepted.length,
+          skippedDuplicateRows,
+          skippedDuplicateFile
+        })
+      );
+      messages.push(
+        skippedDuplicateFile
+          ? `${file.name}: already imported, skipped`
+          : `${file.name}: ${accepted.length.toLocaleString()} added, ${skippedDuplicateRows.toLocaleString()} skipped`
+      );
     }
 
-    setTransactions((current) => [...current, ...nextTransactions]);
-    setQuality((current) => [...current, ...nextQuality]);
+    setLedger((current) => ({
+      version: 1,
+      transactions: [...current.transactions, ...nextTransactions],
+      quality: [...current.quality, ...nextQuality],
+      importedFileFingerprints: [...existingFileFingerprints],
+      importedTransactionKeys: [...existingTransactionKeys]
+    }));
     setImportMessage(messages.join(" | "));
   }
 
   function clearAllData() {
-    setTransactions([]);
-    setQuality([]);
+    setLedger(createEmptyImportLedger());
     setImportMessage("");
     setFilters(emptyFilters);
   }
@@ -178,7 +225,11 @@ export function App() {
                 type="file"
                 multiple
                 accept=".xls,.xml,.csv,text/xml,text/csv"
-                onChange={(event) => void importFiles(event.currentTarget.files)}
+                onChange={(event) => {
+                  const files = event.currentTarget.files;
+                  void importFiles(files);
+                  event.currentTarget.value = "";
+                }}
               />
             </label>
             <button className="ghost-button" onClick={clearAllData} disabled={!enriched.length}>
@@ -222,7 +273,11 @@ export function App() {
             )}
             {activeView === "customers" && <CustomerGeoView rows={filtered} />}
             {activeView === "quality" && (
-              <QualityView rows={enriched} quality={quality} sourceRange={importedSourceRange ?? sourceRange} />
+              <QualityView
+                rows={enriched}
+                quality={quality}
+                sourceRange={importedSourceRange ?? sourceRange}
+              />
             )}
           </>
         )}
@@ -633,6 +688,9 @@ function QualityView({
   sourceRange?: { start: string; end: string };
 }) {
   const duplicateCount = countDuplicateRows(rows);
+  const acceptedRows = quality.reduce((total, item) => total + item.acceptedTransactionCount, 0);
+  const skippedRows = quality.reduce((total, item) => total + item.skippedDuplicateRows, 0);
+  const skippedFiles = quality.filter((item) => item.skippedDuplicateFile).length;
   const missingReps = rows.filter((row) => !row.salesRepVendor).length;
   const missingClasses = rows.filter((row) => !row.productClass).length;
   const missingStates = rows.filter((row) => !row.shippingState).length;
@@ -640,7 +698,10 @@ function QualityView({
   return (
     <section className="view-stack">
       <div className="kpi-grid compact">
-        <Kpi label="Imported files" value={quality.length.toLocaleString()} />
+        <Kpi label="Import batches" value={quality.length.toLocaleString()} />
+        <Kpi label="Accepted rows" value={acceptedRows.toLocaleString()} />
+        <Kpi label="Skipped duplicates" value={skippedRows.toLocaleString()} />
+        <Kpi label="Duplicate files" value={skippedFiles.toLocaleString()} />
         <Kpi label="Source coverage" value={sourceRange ? `${sourceRange.start} to ${sourceRange.end}` : "n/a"} />
         <Kpi label="Possible duplicates" value={duplicateCount.toLocaleString()} />
         <Kpi label="Missing rep/vendor" value={missingReps.toLocaleString()} />
@@ -653,10 +714,13 @@ function QualityView({
           <thead>
             <tr>
               <th>File</th>
+              <th>Imported</th>
               <th>Type</th>
               <th>Sheet</th>
               <th>Parsed rows</th>
               <th>Transactions</th>
+              <th>Accepted</th>
+              <th>Skipped duplicates</th>
               <th>Excluded totals</th>
               <th>Excluded groups</th>
               <th>Date coverage</th>
@@ -666,12 +730,15 @@ function QualityView({
           </thead>
           <tbody>
             {quality.map((item) => (
-              <tr key={`${item.sourceFile}-${item.transactionCount}`}>
+              <tr key={item.batchId}>
                 <td>{item.sourceFile}</td>
+                <td>{formatShortDateTime(item.importedAt)}</td>
                 <td>{item.sourceReportType}</td>
                 <td>{item.sourceSheetName ?? "n/a"}</td>
                 <td>{item.parsedRowCount.toLocaleString()}</td>
                 <td>{item.transactionCount.toLocaleString()}</td>
+                <td>{item.acceptedTransactionCount.toLocaleString()}</td>
+                <td>{item.skippedDuplicateRows.toLocaleString()}</td>
                 <td>{item.excludedTotalRows.toLocaleString()}</td>
                 <td>{item.excludedGroupRows.toLocaleString()}</td>
                 <td>{item.dateRange ? `${item.dateRange.start} to ${item.dateRange.end}` : "n/a"}</td>
@@ -679,6 +746,8 @@ function QualityView({
                 <td>
                   {[
                     item.duplicateRowCount ? `${item.duplicateRowCount} duplicate-looking rows` : "",
+                    item.skippedDuplicateFile ? "file already imported" : "",
+                    item.skippedDuplicateRows ? `${item.skippedDuplicateRows} previously imported rows skipped` : "",
                     item.missingSalesRepVendorCount ? `${item.missingSalesRepVendorCount} missing rep` : "",
                     item.missingProductClassCount ? `${item.missingProductClassCount} missing class` : "",
                     item.missingStateCount ? `${item.missingStateCount} missing state` : "",
@@ -952,6 +1021,25 @@ function loadStored<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+async function fingerprintFile(fileName: string, text: string) {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const hash = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `${fileName.toLowerCase()}::${hash}`;
+}
+
+function formatShortDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function combineQualityRanges(quality: ImportQualitySummary[]) {
