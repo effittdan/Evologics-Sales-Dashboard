@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+*.local
+
+# Local NetSuite exports can contain customer/order data.
+*.xls
+*.xlsx
+*.csv
+*.tsv
+*.xml
+!tests/fixtures/**
