@@ -15,6 +15,7 @@ describe("local auth", () => {
     const expectedUsers = [
       ["Theresa Hong", "theresa@evologicsamerica.com", "administrator"],
       ["Dan Hong", "dan@effitt.com", "administrator"],
+      ["Wendy Reyes", "wendy@evologicsamerica.com", "administrator"],
       ["Mike Crescenzo", "mike@evologicsamerica.com", "user"],
       ["Ryan Gray", "ryan@evologicsamerica.com", "user"],
       ["Jim Courville", "jim@evologicsamerica.com", "user"],
@@ -28,7 +29,7 @@ describe("local auth", () => {
         status: "Active"
       });
     });
-    expect(users).toHaveLength(6);
+    expect(users).toHaveLength(7);
     expect(users.every((user) => /^[a-f0-9]{64}$/.test(user.passwordHash))).toBe(true);
     expect(users.every((user) => !user.passwordHash.includes("evo"))).toBe(true);
   });

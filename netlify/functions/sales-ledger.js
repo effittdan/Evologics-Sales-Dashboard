@@ -3,6 +3,7 @@ const { createClient } = require("@supabase/supabase-js");
 const approvedUsers = {
   "theresa@evologicsamerica.com": { roles: ["administrator"] },
   "dan@effitt.com": { roles: ["administrator"] },
+  "wendy@evologicsamerica.com": { roles: ["administrator"] },
   "mike@evologicsamerica.com": { roles: ["user"] },
   "ryan@evologicsamerica.com": { roles: ["user"] },
   "jim@evologicsamerica.com": { roles: ["user"] },
