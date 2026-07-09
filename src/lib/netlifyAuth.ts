@@ -1,5 +1,6 @@
 import {
   AuthError,
+  getSettings,
   getUser,
   handleAuthCallback,
   login,
@@ -24,6 +25,17 @@ export function shouldUseNetlifyIdentity() {
 export async function initializeNetlifyIdentity() {
   await handleAuthCallback();
   return normalizeNetlifyUser(await getUser());
+}
+
+export async function checkNetlifyIdentitySettings() {
+  try {
+    await getSettings();
+    return "";
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : "Netlify Identity settings are not available for this site.";
+  }
 }
 
 export function watchNetlifyIdentity(onChange: (user: NetlifyAuthUser | null) => void) {

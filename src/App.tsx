@@ -64,6 +64,7 @@ import {
   parseNetSuiteSpreadsheetMLReport
 } from "./lib/importers";
 import {
+  checkNetlifyIdentitySettings,
   initializeNetlifyIdentity,
   loginWithNetlifyIdentity,
   logoutNetlifyIdentity,
@@ -176,6 +177,14 @@ export function App() {
       .finally(() => {
         if (mounted) setAuthLoading(false);
       });
+
+    checkNetlifyIdentitySettings().then((message) => {
+      if (mounted && message) {
+        setAuthNotice(
+          "Netlify Identity is not enabled for this site yet. Enable Identity in Netlify, then invite the approved users."
+        );
+      }
+    });
 
     const unsubscribe = watchNetlifyIdentity((netlifyUser) => {
       applyNetlifyUser(netlifyUser?.email);
