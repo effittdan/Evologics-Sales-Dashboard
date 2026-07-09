@@ -11,8 +11,9 @@
   },
   "dependencies": {
     "@netlify/identity": "^1.2.0",
+    "@supabase/supabase-js": "2.110.2",
     "@vitejs/plugin-react": "^4.3.4",
-    "fast-xml-parser": "^4.5.1",
+    "fast-xml-parser": "5.9.3",
     "lucide-react": "^0.468.0",
     "papaparse": "^5.4.1",
     "react": "^18.3.1",

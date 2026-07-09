@@ -74,6 +74,11 @@ import {
   shouldUseNetlifyIdentity,
   watchNetlifyIdentity
 } from "./lib/netlifyAuth";
+import {
+  loadSharedSalesLedger,
+  saveSharedSalesLedger,
+  shouldUseSharedLedger
+} from "./lib/sharedLedger";
 import type {
   AppSession,
   AppUser,
@@ -118,11 +123,18 @@ export function App() {
   const [authLoading, setAuthLoading] = useState(() => shouldUseNetlifyIdentity());
   const [authNotice, setAuthNotice] = useState("");
   const [selectedRepVendor, setSelectedRepVendor] = useState<string | null>(null);
+  const [sharedLedgerMessage, setSharedLedgerMessage] = useState("");
+  const [sharedLedgerMeta, setSharedLedgerMeta] = useState<{
+    updatedAt?: string | null;
+    updatedByEmail?: string | null;
+  } | null>(null);
 
   const transactions = ledger.transactions;
   const quality = ledger.quality;
   const currentUser = activeSessionUser(users, session);
   const netlifyIdentityEnabled = shouldUseNetlifyIdentity();
+  const sharedLedgerEnabled = shouldUseSharedLedger();
+  const canManageSalesData = currentUser?.role === "administrator";
 
   useEffect(() => {
     localStorage.setItem(storageKeys.ledger, JSON.stringify(ledger));
@@ -200,6 +212,41 @@ export function App() {
     };
   }, [netlifyIdentityEnabled, users]);
 
+  useEffect(() => {
+    if (!sharedLedgerEnabled || !currentUser) return;
+
+    let mounted = true;
+    setSharedLedgerMessage("Loading shared sales data...");
+    loadSharedSalesLedger()
+      .then((result) => {
+        if (!mounted) return;
+        setLedger(result.ledger);
+        setSharedLedgerMeta({
+          updatedAt: result.updatedAt,
+          updatedByEmail: result.updatedByEmail
+        });
+        setSharedLedgerMessage(
+          result.updatedAt
+            ? `Shared data loaded. Last updated ${formatShortDateTime(result.updatedAt)}${
+                result.updatedByEmail ? ` by ${result.updatedByEmail}` : ""
+              }.`
+            : "Shared data loaded. No imports have been saved yet."
+        );
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        setSharedLedgerMessage(
+          error instanceof Error
+            ? `${error.message} Using this browser's local sales data for now.`
+            : "Shared sales storage is not available. Using this browser's local sales data for now."
+        );
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser, sharedLedgerEnabled]);
+
   const enriched = useMemo(
     () => applyEnrichments(transactions, repMappings, skuEnrichments),
     [transactions, repMappings, skuEnrichments]
@@ -214,6 +261,10 @@ export function App() {
 
   async function importFiles(files: FileList | null) {
     if (!files?.length) return;
+    if (sharedLedgerEnabled && !canManageSalesData) {
+      setImportMessage("Only administrators can update shared sales data.");
+      return;
+    }
     const nextTransactions: SalesTransaction[] = [];
     const nextQuality: ImportQualitySummary[] = [];
     const messages: string[] = [];
@@ -262,20 +313,77 @@ export function App() {
       );
     }
 
-    setLedger((current) => ({
+    const nextLedger: ImportLedger = {
       version: 1,
-      transactions: [...current.transactions, ...nextTransactions],
-      quality: [...current.quality, ...nextQuality],
+      transactions: [...ledger.transactions, ...nextTransactions],
+      quality: [...ledger.quality, ...nextQuality],
       importedFileFingerprints: [...existingFileFingerprints],
       importedTransactionKeys: [...existingTransactionKeys]
-    }));
+    };
+    setLedger(nextLedger);
     setImportMessage(messages.join(" | "));
+    await saveSharedLedgerIfEnabled(nextLedger);
   }
 
-  function clearAllData() {
-    setLedger(createEmptyImportLedger());
+  async function clearAllData() {
+    if (sharedLedgerEnabled && !canManageSalesData) {
+      setImportMessage("Only administrators can clear shared sales data.");
+      return;
+    }
+    const nextLedger = createEmptyImportLedger();
+    setLedger(nextLedger);
     setImportMessage("");
     setFilters(emptyFilters);
+    await saveSharedLedgerIfEnabled(nextLedger);
+  }
+
+  async function refreshSharedLedger() {
+    if (!sharedLedgerEnabled) return;
+    setSharedLedgerMessage("Refreshing shared sales data...");
+    try {
+      const result = await loadSharedSalesLedger();
+      setLedger(result.ledger);
+      setSharedLedgerMeta({
+        updatedAt: result.updatedAt,
+        updatedByEmail: result.updatedByEmail
+      });
+      setSharedLedgerMessage(
+        result.updatedAt
+          ? `Shared data refreshed. Last updated ${formatShortDateTime(result.updatedAt)}${
+              result.updatedByEmail ? ` by ${result.updatedByEmail}` : ""
+            }.`
+          : "Shared data refreshed. No imports have been saved yet."
+      );
+    } catch (error) {
+      setSharedLedgerMessage(
+        error instanceof Error ? error.message : "Shared sales storage is not available."
+      );
+    }
+  }
+
+  async function saveSharedLedgerIfEnabled(nextLedger: ImportLedger) {
+    if (!sharedLedgerEnabled) return;
+    setSharedLedgerMessage("Saving shared sales data...");
+    try {
+      const result = await saveSharedSalesLedger(nextLedger);
+      setSharedLedgerMeta({
+        updatedAt: result.updatedAt,
+        updatedByEmail: result.updatedByEmail
+      });
+      setSharedLedgerMessage(
+        result.updatedAt
+          ? `Shared data saved. Last updated ${formatShortDateTime(result.updatedAt)}${
+              result.updatedByEmail ? ` by ${result.updatedByEmail}` : ""
+            }.`
+          : "Shared data saved."
+      );
+    } catch (error) {
+      setSharedLedgerMessage(
+        error instanceof Error
+          ? `${error.message} Changes are only saved in this browser until shared storage is restored.`
+          : "Shared sales storage is not available. Changes are only saved in this browser for now."
+      );
+    }
   }
 
   async function signIn(email: string, password: string) {
@@ -421,23 +529,37 @@ export function App() {
               <span>{currentUser.name}</span>
               <small>{currentUser.role}</small>
             </div>
-            <label className="upload-button">
-              <FileUp size={18} />
-              Import files
-              <input
-                type="file"
-                multiple
-                accept=".xls,.xml,.csv,text/xml,text/csv"
-                onChange={(event) => {
-                  const files = event.currentTarget.files;
-                  void importFiles(files);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
-            <button className="ghost-button" onClick={clearAllData} disabled={!enriched.length}>
-              Clear
-            </button>
+            {sharedLedgerEnabled ? (
+              <button className="ghost-button" onClick={() => void refreshSharedLedger()}>
+                <RefreshCcw size={18} />
+                Sync
+              </button>
+            ) : null}
+            {canManageSalesData ? (
+              <>
+                <label className="upload-button">
+                  <FileUp size={18} />
+                  Import files
+                  <input
+                    type="file"
+                    multiple
+                    accept=".xls,.xml,.csv,text/xml,text/csv"
+                    onChange={(event) => {
+                      const files = event.currentTarget.files;
+                      void importFiles(files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <button
+                  className="ghost-button"
+                  onClick={() => void clearAllData()}
+                  disabled={!enriched.length}
+                >
+                  Clear
+                </button>
+              </>
+            ) : null}
             <button
               className="ghost-button icon-button"
               onClick={() => void signOut()}
@@ -448,6 +570,7 @@ export function App() {
           </div>
         </header>
 
+        {sharedLedgerMessage ? <div className="status-strip">{sharedLedgerMessage}</div> : null}
         {importMessage ? <div className="status-strip">{importMessage}</div> : null}
 
         <FilterPanel
