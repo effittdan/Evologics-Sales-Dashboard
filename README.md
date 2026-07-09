@@ -36,3 +36,9 @@ The real NetSuite exports are intentionally ignored by Git because they may cont
 Import history is stored locally in the browser. Re-importing the exact same file is recorded in the quality ledger but contributes zero new transactions. Rows already accepted from earlier imports are skipped on later imports.
 
 Duplicate-looking rows inside the same newly imported file are preserved because NetSuite can legitimately export separate line items that appear identical.
+
+## Local Login Prototype
+
+The dashboard includes a local sign-in panel and browser-stored user list for MVP workflow testing. The seeded admin user is Theresa Hong at `theresa@evologicsamerica.com`; the password is stored as a browser-side hash, not plaintext.
+
+This is not production authentication. Before live company use, move users, password handling, sessions, roles, and audit logs to a server-backed identity provider or database.

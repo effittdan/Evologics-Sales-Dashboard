@@ -30,6 +30,71 @@ body {
   background-size: 32px 32px;
 }
 
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+.login-panel {
+  width: min(100%, 460px);
+  display: grid;
+  gap: 22px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  display: grid;
+  gap: 8px;
+}
+
+.login-brand img {
+  width: 190px;
+  height: auto;
+}
+
+.login-brand span,
+.security-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-submit {
+  justify-content: center;
+  border: 0;
+}
+
+.form-error,
+.form-note {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.form-error {
+  color: #8d2f2f;
+  background: #fff1f1;
+  border: 1px solid #f1c4c4;
+}
+
+.form-note {
+  grid-column: 1 / -1;
+  color: var(--primary);
+  background: #f2f8f5;
+  border: 1px solid var(--border);
+}
+
 button,
 input,
 select {
@@ -169,6 +234,27 @@ h2 {
   flex-wrap: wrap;
 }
 
+.user-chip {
+  display: grid;
+  gap: 2px;
+  min-height: 42px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--primary);
+}
+
+.user-chip span {
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.user-chip small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .upload-button,
 .ghost-button {
   min-height: 42px;
@@ -198,6 +284,12 @@ h2 {
 .ghost-button:disabled {
   color: var(--steel);
   cursor: not-allowed;
+}
+
+.icon-button {
+  width: 42px;
+  justify-content: center;
+  padding: 0;
 }
 
 .status-strip {
@@ -400,6 +492,61 @@ select[multiple] {
   background: #f8fbf9;
 }
 
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-pill.active {
+  color: var(--primary);
+  background: #e8f2ee;
+}
+
+.status-pill.inactive {
+  color: #6f7775;
+  background: #eef1f1;
+}
+
+.table-action {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--primary);
+  background: #fff;
+  font-weight: 700;
+}
+
+.table-action:disabled {
+  color: var(--steel);
+  cursor: not-allowed;
+}
+
+.user-form {
+  display: grid;
+  grid-template-columns: 1.2fr 1.4fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.form-title {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+}
+
 .table-card td {
   color: #25302e;
 }
@@ -483,7 +630,8 @@ select[multiple] {
   .filter-grid,
   .dashboard-grid,
   .kpi-grid,
-  .kpi-grid.compact {
+  .kpi-grid.compact,
+  .user-form {
     grid-template-columns: 1fr;
   }
 

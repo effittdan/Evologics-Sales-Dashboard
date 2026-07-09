@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
   Database,
   FileUp,
+  LockKeyhole,
+  LogOut,
   PackageSearch,
   RefreshCcw,
   SlidersHorizontal,
+  UserPlus,
   UsersRound
 } from "lucide-react";
 import {
@@ -47,6 +50,12 @@ import {
   type DashboardFilters
 } from "./lib/analytics";
 import {
+  activeSessionUser,
+  authenticateUser,
+  createUserRecord,
+  initializeUsers
+} from "./lib/auth";
+import {
   isSpreadsheetMLExport,
   normalizeSalesTransactionRows,
   parseNetSuiteSavedSearchCSV,
@@ -54,6 +63,9 @@ import {
   parseNetSuiteSpreadsheetMLReport
 } from "./lib/importers";
 import type {
+  AppSession,
+  AppUser,
+  AppUserRole,
   ImportLedger,
   ImportQualitySummary,
   SalesEntityType,
@@ -66,7 +78,9 @@ const chartColors = ["#1F4F45", "#4F7D6D", "#C9B27E", "#7B9C8D", "#AAB7BA"];
 const storageKeys = {
   ledger: "evologics-import-ledger",
   reps: "evologics-sales-rep-mappings",
-  skus: "evologics-sku-enrichments"
+  skus: "evologics-sku-enrichments",
+  users: "evologics-users",
+  session: "evologics-session"
 };
 
 export function App() {
@@ -82,10 +96,17 @@ export function App() {
   const [skuEnrichments, setSkuEnrichments] = useState<SkuEnrichment[]>(() =>
     loadStored(storageKeys.skus, [])
   );
+  const [users, setUsers] = useState<AppUser[]>(() =>
+    initializeUsers(loadStored<AppUser[] | undefined>(storageKeys.users, undefined))
+  );
+  const [session, setSession] = useState<AppSession | null>(() =>
+    loadStored<AppSession | null>(storageKeys.session, null)
+  );
   const [importMessage, setImportMessage] = useState("");
 
   const transactions = ledger.transactions;
   const quality = ledger.quality;
+  const currentUser = activeSessionUser(users, session);
 
   useEffect(() => {
     localStorage.setItem(storageKeys.ledger, JSON.stringify(ledger));
@@ -98,6 +119,18 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(storageKeys.skus, JSON.stringify(skuEnrichments));
   }, [skuEnrichments]);
+
+  useEffect(() => {
+    localStorage.setItem(storageKeys.users, JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    if (session) {
+      localStorage.setItem(storageKeys.session, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(storageKeys.session);
+    }
+  }, [session]);
 
   const enriched = useMemo(
     () => applyEnrichments(transactions, repMappings, skuEnrichments),
@@ -177,6 +210,46 @@ export function App() {
     setFilters(emptyFilters);
   }
 
+  async function signIn(email: string, password: string) {
+    const user = await authenticateUser(users, email, password);
+    if (!user) return false;
+    const signedInAt = new Date().toISOString();
+    setUsers((current) =>
+      current.map((item) => (item.id === user.id ? { ...item, lastLoginAt: signedInAt } : item))
+    );
+    setSession({ userId: user.id, signedInAt });
+    return true;
+  }
+
+  function signOut() {
+    setSession(null);
+    setActiveView("overview");
+  }
+
+  async function addUser(input: { name: string; email: string; role: AppUserRole; password: string }) {
+    const email = input.email.trim().toLowerCase();
+    if (users.some((user) => user.email.toLowerCase() === email)) {
+      return "A user with that email already exists.";
+    }
+    const user = await createUserRecord(input);
+    setUsers((current) => [...current, user]);
+    return "";
+  }
+
+  function toggleUserStatus(userId: string) {
+    setUsers((current) =>
+      current.map((user) =>
+        user.id === userId
+          ? { ...user, status: user.status === "Active" ? "Inactive" : "Active" }
+          : user
+      )
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginPanel onSignIn={signIn} />;
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -203,6 +276,9 @@ export function App() {
           <NavButton icon={<AlertTriangle />} id="quality" active={activeView} onClick={setActiveView}>
             Import Quality
           </NavButton>
+          <NavButton icon={<UsersRound />} id="users" active={activeView} onClick={setActiveView}>
+            Users
+          </NavButton>
         </nav>
       </aside>
 
@@ -218,6 +294,10 @@ export function App() {
             </p>
           </div>
           <div className="import-actions">
+            <div className="user-chip">
+              <span>{currentUser.name}</span>
+              <small>{currentUser.role}</small>
+            </div>
             <label className="upload-button">
               <FileUp size={18} />
               Import files
@@ -235,6 +315,9 @@ export function App() {
             <button className="ghost-button" onClick={clearAllData} disabled={!enriched.length}>
               Clear
             </button>
+            <button className="ghost-button icon-button" onClick={signOut} aria-label="Sign out">
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
 
@@ -247,7 +330,14 @@ export function App() {
           selectedRange={selectedRange}
         />
 
-        {!enriched.length ? (
+        {activeView === "users" ? (
+          <UserList
+            currentUser={currentUser}
+            users={users}
+            onAddUser={addUser}
+            onToggleStatus={toggleUserStatus}
+          />
+        ) : !enriched.length ? (
           <EmptyState />
         ) : (
           <>
@@ -283,6 +373,204 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function LoginPanel({ onSignIn }: { onSignIn: (email: string, password: string) => Promise<boolean> }) {
+  const [email, setEmail] = useState("theresa@evologicsamerica.com");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    const signedIn = await onSignIn(email, password);
+    if (!signedIn) setError("Email or password did not match an active user.");
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-panel">
+        <div className="login-brand">
+          <img src="/evologics-logo-wide.png" alt="Evologics" />
+          <span>Sales Analytics</span>
+        </div>
+        <div>
+          <p className="eyebrow">Secure local MVP</p>
+          <h1>Sign in</h1>
+          <p className="subtle">
+            Access imports, analytics, and the local user directory for this browser.
+          </p>
+        </div>
+        <form className="login-form" onSubmit={(event) => void submit(event)}>
+          <label>
+            Email
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {error ? <div className="form-error">{error}</div> : null}
+          <button className="upload-button login-submit" type="submit">
+            <LockKeyhole size={18} />
+            Sign in
+          </button>
+        </form>
+        <p className="security-note">
+          Local prototype auth only. Production access should move to a server-backed identity
+          provider before live company use.
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function UserList({
+  currentUser,
+  users,
+  onAddUser,
+  onToggleStatus
+}: {
+  currentUser: AppUser;
+  users: AppUser[];
+  onAddUser: (input: {
+    name: string;
+    email: string;
+    role: AppUserRole;
+    password: string;
+  }) => Promise<string>;
+  onToggleStatus: (userId: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<AppUserRole>("Sales Rep");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    if (!name.trim() || !email.trim() || password.length < 8) {
+      setMessage("Add a name, email, and temporary password with at least 8 characters.");
+      return;
+    }
+    const error = await onAddUser({ name, email, role, password });
+    if (error) {
+      setMessage(error);
+      return;
+    }
+    setName("");
+    setEmail("");
+    setPassword("");
+    setRole("Sales Rep");
+    setMessage("User added to this browser.");
+  }
+
+  return (
+    <section className="view-stack">
+      <div className="section-header">
+        <div>
+          <p className="eyebrow">Access</p>
+          <h2>User list</h2>
+          <p className="subtle">Local users for this dashboard prototype.</p>
+        </div>
+        <div className="user-chip">
+          <span>{users.filter((user) => user.status === "Active").length} active</span>
+          <small>{users.length} total</small>
+        </div>
+      </div>
+      <div className="table-card">
+        <h2>Users</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Last sign-in</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id}>
+                <td>{user.name}</td>
+                <td>{user.email}</td>
+                <td>{user.role}</td>
+                <td>
+                  <span className={`status-pill ${user.status === "Active" ? "active" : "inactive"}`}>
+                    {user.status}
+                  </span>
+                </td>
+                <td>{user.lastLoginAt ? formatShortDateTime(user.lastLoginAt) : "Not yet"}</td>
+                <td>
+                  <button
+                    className="table-action"
+                    disabled={user.id === currentUser.id}
+                    onClick={() => onToggleStatus(user.id)}
+                  >
+                    {user.status === "Active" ? "Deactivate" : "Activate"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <form className="user-form" onSubmit={(event) => void submit(event)}>
+        <div className="form-title">
+          <UserPlus size={18} />
+          <h2>Add User</h2>
+        </div>
+        <label>
+          Name
+          <input value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label>
+          Email
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <label>
+          Role
+          <select value={role} onChange={(event) => setRole(event.target.value as AppUserRole)}>
+            <option>Admin</option>
+            <option>Executive</option>
+            <option>Operations</option>
+            <option>Sales Manager</option>
+            <option>Sales Rep</option>
+          </select>
+        </label>
+        <label>
+          Temporary password
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+        <button className="upload-button" type="submit">
+          <UserPlus size={18} />
+          Add
+        </button>
+        {message ? <div className="form-note">{message}</div> : null}
+      </form>
+    </section>
   );
 }
 

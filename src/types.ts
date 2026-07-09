@@ -99,3 +99,21 @@ export type SkuEnrichment = {
   category?: string;
   notes?: string;
 };
+
+export type AppUserRole = "Admin" | "Executive" | "Operations" | "Sales Manager" | "Sales Rep";
+
+export type AppUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: AppUserRole;
+  status: "Active" | "Inactive";
+  passwordHash: string;
+  createdAt: string;
+  lastLoginAt?: string;
+};
+
+export type AppSession = {
+  userId: string;
+  signedInAt: string;
+};
