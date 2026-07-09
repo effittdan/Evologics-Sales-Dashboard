@@ -1,28 +1,85 @@
 import type { AppSession, AppUser, AppUserRole } from "../types";
 
-const theresaPasswordHash = "3c591eded51fdc8123d621739d6d1d4f252a0e70b6350c09b990d30e352edefb";
+const sharedSeedPasswordHash = "3c591eded51fdc8123d621739d6d1d4f252a0e70b6350c09b990d30e352edefb";
 
 export const seedUsers: AppUser[] = [
   {
     id: "usr_theresa_hong",
     name: "Theresa Hong",
     email: "theresa@evologicsamerica.com",
-    role: "Admin",
+    role: "administrator",
     status: "Active",
-    passwordHash: theresaPasswordHash,
+    passwordHash: sharedSeedPasswordHash,
+    createdAt: "2026-07-09T00:00:00.000Z"
+  },
+  {
+    id: "usr_dan_hong",
+    name: "Dan Hong",
+    email: "dan@effitt.com",
+    role: "administrator",
+    status: "Active",
+    passwordHash: sharedSeedPasswordHash,
+    createdAt: "2026-07-09T00:00:00.000Z"
+  },
+  {
+    id: "usr_mike_crescenzo",
+    name: "Mike Crescenzo",
+    email: "mike@evologicsamerica.com",
+    role: "user",
+    status: "Active",
+    passwordHash: sharedSeedPasswordHash,
+    createdAt: "2026-07-09T00:00:00.000Z"
+  },
+  {
+    id: "usr_ryan_gray",
+    name: "Ryan Gray",
+    email: "ryan@evologicsamerica.com",
+    role: "user",
+    status: "Active",
+    passwordHash: sharedSeedPasswordHash,
+    createdAt: "2026-07-09T00:00:00.000Z"
+  },
+  {
+    id: "usr_jim_courville",
+    name: "Jim Courville",
+    email: "jim@evologicsamerica.com",
+    role: "user",
+    status: "Active",
+    passwordHash: sharedSeedPasswordHash,
+    createdAt: "2026-07-09T00:00:00.000Z"
+  },
+  {
+    id: "usr_sam_williamson",
+    name: "Sam Williamson",
+    email: "sam@evologicsamerica.com",
+    role: "user",
+    status: "Active",
+    passwordHash: sharedSeedPasswordHash,
     createdAt: "2026-07-09T00:00:00.000Z"
   }
 ];
 
 export function initializeUsers(storedUsers: AppUser[] | undefined | null) {
   if (!storedUsers?.length) return seedUsers;
-  const usersByEmail = new Map(storedUsers.map((user) => [user.email.toLowerCase(), user]));
+  const usersByEmail = new Map(
+    storedUsers.map((user) => [user.email.toLowerCase(), normalizeStoredUser(user)])
+  );
   seedUsers.forEach((seedUser) => {
-    if (!usersByEmail.has(seedUser.email.toLowerCase())) {
-      usersByEmail.set(seedUser.email.toLowerCase(), seedUser);
-    }
+    const storedUser = usersByEmail.get(seedUser.email.toLowerCase());
+    usersByEmail.set(seedUser.email.toLowerCase(), {
+      ...storedUser,
+      ...seedUser,
+      lastLoginAt: storedUser?.lastLoginAt
+    });
   });
   return [...usersByEmail.values()];
+}
+
+function normalizeStoredUser(user: AppUser): AppUser {
+  return {
+    ...user,
+    role: user.role === "administrator" || user.role === "user" ? user.role : "user"
+  };
 }
 
 export async function authenticateUser(users: AppUser[], email: string, password: string) {

@@ -100,7 +100,7 @@ export type SkuEnrichment = {
   notes?: string;
 };
 
-export type AppUserRole = "Admin" | "Executive" | "Operations" | "Sales Manager" | "Sales Rep";
+export type AppUserRole = "administrator" | "user";
 
 export type AppUser = {
   id: string;

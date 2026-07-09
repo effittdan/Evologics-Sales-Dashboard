@@ -39,6 +39,6 @@ Duplicate-looking rows inside the same newly imported file are preserved because
 
 ## Local Login Prototype
 
-The dashboard includes a local sign-in panel and browser-stored user list for MVP workflow testing. The seeded admin user is Theresa Hong at `theresa@evologicsamerica.com`; the password is stored as a browser-side hash, not plaintext.
+The dashboard includes a local sign-in panel and browser-stored user list for MVP workflow testing. Seeded users are split between `administrator` and `user` roles, and passwords are stored as browser-side hashes, not plaintext.
 
 This is not production authentication. Before live company use, move users, password handling, sessions, roles, and audit logs to a server-backed identity provider or database.

@@ -454,7 +454,7 @@ function UserList({
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<AppUserRole>("Sales Rep");
+  const [role, setRole] = useState<AppUserRole>("user");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
@@ -473,7 +473,7 @@ function UserList({
     setName("");
     setEmail("");
     setPassword("");
-    setRole("Sales Rep");
+    setRole("user");
     setMessage("User added to this browser.");
   }
 
@@ -549,11 +549,8 @@ function UserList({
         <label>
           Role
           <select value={role} onChange={(event) => setRole(event.target.value as AppUserRole)}>
-            <option>Admin</option>
-            <option>Executive</option>
-            <option>Operations</option>
-            <option>Sales Manager</option>
-            <option>Sales Rep</option>
+            <option value="administrator">administrator</option>
+            <option value="user">user</option>
           </select>
         </label>
         <label>
