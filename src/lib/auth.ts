@@ -31,6 +31,15 @@ export const seedUsers: AppUser[] = [
     createdAt: "2026-07-09T00:00:00.000Z"
   },
   {
+    id: "usr_eda_brown",
+    name: "Eda Brown",
+    email: "eda@evologicsamerica.com",
+    role: "user",
+    status: "Active",
+    passwordHash: sharedSeedPasswordHash,
+    createdAt: "2026-07-10T00:00:00.000Z"
+  },
+  {
     id: "usr_mike_crescenzo",
     name: "Mike Crescenzo",
     email: "mike@evologicsamerica.com",

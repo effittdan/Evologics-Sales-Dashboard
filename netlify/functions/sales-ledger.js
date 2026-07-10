@@ -4,6 +4,7 @@ const approvedUsers = {
   "theresa@evologicsamerica.com": { roles: ["administrator"] },
   "dan@effitt.com": { roles: ["administrator"] },
   "wendy@evologicsamerica.com": { roles: ["administrator"] },
+  "eda@evologicsamerica.com": { roles: ["user"] },
   "mike@evologicsamerica.com": { roles: ["user"] },
   "ryan@evologicsamerica.com": { roles: ["user"] },
   "jim@evologicsamerica.com": { roles: ["user"] },

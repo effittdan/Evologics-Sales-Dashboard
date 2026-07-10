@@ -2,6 +2,7 @@ const approvedUsers = {
   "theresa@evologicsamerica.com": { name: "Theresa Hong", roles: ["administrator"] },
   "dan@effitt.com": { name: "Dan Hong", roles: ["administrator"] },
   "wendy@evologicsamerica.com": { name: "Wendy Reyes", roles: ["administrator"] },
+  "eda@evologicsamerica.com": { name: "Eda Brown", roles: ["user"] },
   "mike@evologicsamerica.com": { name: "Mike Crescenzo", roles: ["user"] },
   "ryan@evologicsamerica.com": { name: "Ryan Gray", roles: ["user"] },
   "jim@evologicsamerica.com": { name: "Jim Courville", roles: ["user"] },
