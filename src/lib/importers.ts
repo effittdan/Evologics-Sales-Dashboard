@@ -203,7 +203,15 @@ function normalizeRow(
   const transactionDate = toIsoDate(get("Date", "Transaction Date", "transactionDate"));
   const documentNumber = get("Document Number", "Document No.", "documentNumber");
   const sku = get("Item", "SKU", "Item Internal ID", "item", "sku");
-  const salesRepVendor = get("Sales Rep - Vendor", "Sales Rep", "Vendor", "salesRepVendor");
+  const salesRepVendor =
+    get("Sales Rep - Vendor", "Sales Rep", "Vendor", "salesRepVendor") ||
+    get(
+      "Customer Rep Type",
+      "Customer: Rep Type",
+      "Customer RepType",
+      "customerRepType",
+      "customer_rep_type"
+    );
   const repMapping = salesRepVendor ? repMap.get(salesRepVendor) : undefined;
   const skuEnrichment = sku ? skuMap.get(sku) : undefined;
   const transactionType = get("Transaction Type", "Type", "transactionType");
@@ -211,6 +219,14 @@ function normalizeRow(
     get("Class", "Product Class", "Item Class", "productClass") ||
     skuEnrichment?.productClass ||
     skuEnrichment?.category;
+  const salesCategory = get(
+    "Category",
+    "Sales Category",
+    "Customer Category",
+    "category",
+    "salesCategory",
+    "sales_category"
+  );
 
   if (!transactionDate || !documentNumber || !sku) {
     return null;
@@ -234,6 +250,7 @@ function normalizeRow(
     sku,
     productDescription: get("Item: Description (Sales)", "Description", "productDescription"),
     productClass,
+    salesCategory,
     quantity: toNumber(get("Quantity", "quantity")),
     unitPrice: toNumber(get("Unit Price", "Item Rate", "unitPrice")),
     revenue: toNumber(get("Total Revenue", "Amount", "revenue")),

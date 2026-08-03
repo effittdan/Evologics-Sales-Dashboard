@@ -48,6 +48,37 @@ describe("NetSuite SpreadsheetML import adapters", () => {
     });
   });
 
+  it("uses Customer Rep Type when Sales Rep - Vendor is blank", () => {
+    const transactions = normalizeSalesTransactionRows([
+      {
+        sourceFile: "saved-search.csv",
+        sourceReportType: "Unknown",
+        sourceRowNumber: 2,
+        fields: {
+          Customer: "CUST00003 Acme Surgery Center",
+          Type: "Invoice",
+          Date: "2026-07-06",
+          "Document Number": "EV-91001",
+          Item: "EAP-24",
+          Description: "EvoPatch Dual Layer Amnion 2x4cm",
+          Quantity: "1",
+          Amount: "1600",
+          "Sales Rep - Vendor": "",
+          "Customer Rep Type": "House Account",
+          Category: "Direct Retail"
+        }
+      }
+    ]);
+
+    expect(transactions).toHaveLength(1);
+    expect(transactions[0]).toMatchObject({
+      customerCode: "CUST00003",
+      customerName: "Acme Surgery Center",
+      salesRepVendor: "House Account",
+      salesCategory: "Direct Retail"
+    });
+  });
+
   const realYtdIt = existsSync(join(root, ytdSample)) ? it : it.skip;
   realYtdIt("validates the local YTD export sample stats when present", () => {
     const text = readFileSync(join(root, ytdSample), "utf8");

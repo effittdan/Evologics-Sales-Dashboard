@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyFilters,
   createEmptyImportLedger,
+  emptyFilters,
   partitionNewTransactions,
   salesTransactionKey,
   timeSeries
@@ -54,6 +56,20 @@ describe("weekly reporting", () => {
   });
 });
 
+describe("dashboard filters", () => {
+  it("filters sales by sales category", () => {
+    const retail = makeTransaction({ documentNumber: "EV-1", salesCategory: "Direct Retail" });
+    const wholesale = makeTransaction({ documentNumber: "EV-2", salesCategory: "Wholesale" });
+
+    expect(
+      applyFilters([retail, wholesale], {
+        ...emptyFilters,
+        salesCategory: ["Wholesale"]
+      })
+    ).toEqual([wholesale]);
+  });
+});
+
 function makeTransaction(patch: Partial<SalesTransaction> = {}): SalesTransaction {
   return {
     sourceFile: "ytd.xls",
@@ -73,6 +89,7 @@ function makeTransaction(patch: Partial<SalesTransaction> = {}): SalesTransactio
     sku: "EAP-48",
     productDescription: "EvoPatch Dual Layer Amnion 4x8cm",
     productClass: "Amniotic Tissue : EvoPatch",
+    salesCategory: "Direct Retail",
     quantity: 1,
     unitPrice: 2250,
     revenue: 2250,

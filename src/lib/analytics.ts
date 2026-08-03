@@ -16,6 +16,7 @@ export type DashboardFilters = {
   salesRepVendor: string[];
   salesGroup: string[];
   salesEntityType: string[];
+  salesCategory: string[];
   productClass: string[];
   sku: string[];
   customerName: string[];
@@ -28,6 +29,7 @@ export const emptyFilters: DashboardFilters = {
   salesRepVendor: [],
   salesGroup: [],
   salesEntityType: [],
+  salesCategory: [],
   productClass: [],
   sku: [],
   customerName: [],
@@ -70,6 +72,7 @@ export function buildImportQualitySummary(
     duplicateRowCount,
     missingSalesRepVendorCount: transactions.filter((row) => !row.salesRepVendor).length,
     missingProductClassCount: transactions.filter((row) => !row.productClass).length,
+    missingSalesCategoryCount: transactions.filter((row) => !row.salesCategory).length,
     missingStateCount: transactions.filter((row) => !row.shippingState).length
   };
 }
@@ -144,6 +147,7 @@ export function applyFilters(rows: SalesTransaction[], filters: DashboardFilters
     if (!matches(row.salesRepVendor, filters.salesRepVendor)) return false;
     if (!matches(row.salesGroup, filters.salesGroup)) return false;
     if (!matches(row.salesEntityType, filters.salesEntityType)) return false;
+    if (!matches(row.salesCategory, filters.salesCategory)) return false;
     if (!matches(row.productClass, filters.productClass)) return false;
     if (!matches(row.sku, filters.sku)) return false;
     if (!matches(row.customerName, filters.customerName)) return false;

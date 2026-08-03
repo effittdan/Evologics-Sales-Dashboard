@@ -1006,6 +1006,12 @@ function FilterPanel({
           onChange={(values) => set("salesEntityType", values)}
         />
         <MultiSelect
+          label="Category"
+          values={filters.salesCategory}
+          options={optionValues(rows, "salesCategory")}
+          onChange={(values) => set("salesCategory", values)}
+        />
+        <MultiSelect
           label="Product class"
           values={filters.productClass}
           options={optionValues(rows, "productClass")}
@@ -1045,6 +1051,7 @@ function Overview({ rows, metrics }: { rows: SalesTransaction[]; metrics: Return
   const quarterly = timeSeries(rows, "quarter");
   const topReps = topByRevenue(rows, "salesRepVendor", 10);
   const topProducts = topByRevenue(rows, "sku", 10);
+  const salesCategories = topByRevenue(rows, "salesCategory", 10);
   const productClass = topByRevenue(rows, "productClass", 10);
 
   return (
@@ -1069,6 +1076,9 @@ function Overview({ rows, metrics }: { rows: SalesTransaction[]; metrics: Return
         </ChartCard>
         <ChartCard title="Top Products / SKUs">
           <RevenueBar data={topProducts} nameKey="name" />
+        </ChartCard>
+        <ChartCard title="Sales by Category">
+          {salesCategories.length ? <RevenueBar data={salesCategories} nameKey="name" /> : <SoftEmpty text="Upload a report with Category data to enable category reporting." />}
         </ChartCard>
         <ChartCard title="Sales by Product Class">
           {productClass.length ? <RevenueBar data={productClass} nameKey="name" /> : <SoftEmpty text="Upload a report with Class data or enrich SKUs to enable product-class reporting." />}
@@ -1481,6 +1491,7 @@ function QualityView({
   const skippedFiles = quality.filter((item) => item.skippedDuplicateFile).length;
   const missingReps = rows.filter((row) => !row.salesRepVendor).length;
   const missingClasses = rows.filter((row) => !row.productClass).length;
+  const missingCategories = rows.filter((row) => !row.salesCategory).length;
   const missingStates = rows.filter((row) => !row.shippingState).length;
 
   return (
@@ -1493,6 +1504,7 @@ function QualityView({
         <Kpi label="Source coverage" value={sourceRange ? `${sourceRange.start} to ${sourceRange.end}` : "n/a"} />
         <Kpi label="Possible duplicates" value={duplicateCount.toLocaleString()} />
         <Kpi label="Missing rep/vendor" value={missingReps.toLocaleString()} />
+        <Kpi label="Missing category" value={missingCategories.toLocaleString()} />
         <Kpi label="Missing class" value={missingClasses.toLocaleString()} />
         <Kpi label="Missing state" value={missingStates.toLocaleString()} />
       </div>
@@ -1537,6 +1549,7 @@ function QualityView({
                     item.skippedDuplicateFile ? "file already imported" : "",
                     item.skippedDuplicateRows ? `${item.skippedDuplicateRows} previously imported rows skipped` : "",
                     item.missingSalesRepVendorCount ? `${item.missingSalesRepVendorCount} missing rep` : "",
+                    item.missingSalesCategoryCount ? `${item.missingSalesCategoryCount} missing category` : "",
                     item.missingProductClassCount ? `${item.missingProductClassCount} missing class` : "",
                     item.missingStateCount ? `${item.missingStateCount} missing state` : "",
                     ...item.parseErrors

@@ -19,6 +19,7 @@ export type SalesTransaction = {
   sku: string;
   productDescription: string;
   productClass?: string;
+  salesCategory?: string;
   quantity: number;
   unitPrice: number;
   revenue: number;
@@ -69,6 +70,7 @@ export type ImportQualitySummary = {
   duplicateRowCount: number;
   missingSalesRepVendorCount: number;
   missingProductClassCount: number;
+  missingSalesCategoryCount: number;
   missingStateCount: number;
 };
 
