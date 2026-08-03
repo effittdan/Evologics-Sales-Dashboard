@@ -9,7 +9,7 @@ const approvedEmails = new Set([
   "sam@evologicsamerica.com"
 ]);
 
-const handler = async (event) => {
+export const handler = async (event) => {
   const payload = JSON.parse(event.body || "{}");
   const email = String(payload.user?.email || "").toLowerCase();
 
@@ -25,5 +25,3 @@ const handler = async (event) => {
     body: JSON.stringify({})
   };
 };
-
-exports.handler = handler;

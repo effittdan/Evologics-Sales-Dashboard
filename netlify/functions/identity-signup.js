@@ -9,7 +9,7 @@ const approvedUsers = {
   "sam@evologicsamerica.com": { name: "Sam Williamson", roles: ["user"] }
 };
 
-const handler = async (event) => {
+export const handler = async (event) => {
   const payload = JSON.parse(event.body || "{}");
   const email = String(payload.user?.email || "").toLowerCase();
   const approvedUser = approvedUsers[email];
@@ -35,5 +35,3 @@ const handler = async (event) => {
     })
   };
 };
-
-exports.handler = handler;

@@ -1,4 +1,4 @@
-const { createClient } = require("@supabase/supabase-js");
+import { createClient } from "@supabase/supabase-js";
 
 const approvedUsers = {
   "theresa@evologicsamerica.com": { roles: ["administrator"] },
@@ -24,7 +24,7 @@ const jsonHeaders = {
   "content-type": "application/json"
 };
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   if (!["GET", "PUT"].includes(event.httpMethod)) {
     return json(405, { message: "Method not allowed." });
   }
