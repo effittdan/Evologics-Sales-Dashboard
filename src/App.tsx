@@ -4,9 +4,11 @@ import {
   AlertTriangle,
   BarChart3,
   Database,
+  ExternalLink,
   FileUp,
   LockKeyhole,
   LogOut,
+  MapPinned,
   PackageSearch,
   Printer,
   RefreshCcw,
@@ -509,6 +511,16 @@ export function App() {
           <NavButton icon={<Database />} id="customers" active={activeView} onClick={setActiveView}>
             Customers & States
           </NavButton>
+          <a
+            className="external-nav-link"
+            href="https://evologics-map.netlify.app/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <MapPinned />
+            <span>National Sales Map</span>
+            <ExternalLink className="nav-external-icon" aria-hidden="true" />
+          </a>
           <NavButton icon={<AlertTriangle />} id="quality" active={activeView} onClick={setActiveView}>
             Import Quality
           </NavButton>

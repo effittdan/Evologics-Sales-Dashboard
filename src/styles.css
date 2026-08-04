@@ -148,6 +148,7 @@ button {
 }
 
 .nav-list button,
+.nav-list a,
 .ghost-button,
 .upload-button,
 .segmented button,
@@ -156,7 +157,8 @@ button {
   border-radius: 8px;
 }
 
-.nav-list button {
+.nav-list button,
+.nav-list a {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -165,17 +167,33 @@ button {
   color: rgba(255, 255, 255, 0.78);
   background: transparent;
   text-align: left;
+  text-decoration: none;
 }
 
-.nav-list button svg {
+.nav-list button svg,
+.nav-list a > svg:first-child {
   width: 18px;
   height: 18px;
+  flex: 0 0 auto;
 }
 
 .nav-list button.active,
-.nav-list button:hover {
+.nav-list button:hover,
+.nav-list a:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.1);
+}
+
+.nav-list a:focus-visible {
+  outline: 2px solid #c9b27e;
+  outline-offset: 2px;
+}
+
+.nav-list .nav-external-icon {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  opacity: 0.7;
 }
 
 .main-panel {
