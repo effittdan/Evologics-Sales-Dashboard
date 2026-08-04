@@ -137,7 +137,7 @@ button {
   color: #c9b27e;
   font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -166,6 +166,7 @@ button {
   padding: 11px 12px;
   color: rgba(255, 255, 255, 0.78);
   background: transparent;
+  font-weight: 500;
   text-align: left;
   text-decoration: none;
 }
@@ -214,7 +215,7 @@ button {
   color: var(--secondary);
   font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -229,14 +230,14 @@ h1 {
   color: var(--primary);
   font-size: 34px;
   line-height: 1.12;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 h2 {
   color: var(--primary);
   font-size: 18px;
   line-height: 1.2;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .subtle {
@@ -264,7 +265,7 @@ h2 {
 }
 
 .user-chip span {
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.1;
 }
 
@@ -280,6 +281,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -348,14 +350,14 @@ h2 {
   gap: 9px;
   margin-bottom: 14px;
   color: var(--primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .link-button {
   margin-left: auto;
   color: var(--secondary);
   background: transparent;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .filter-grid {
@@ -369,7 +371,7 @@ label {
   gap: 6px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .filter-field {
@@ -377,7 +379,7 @@ label {
   gap: 6px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .date-basis-control {
@@ -443,7 +445,7 @@ select[multiple] {
   color: var(--muted);
   font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -454,7 +456,7 @@ select[multiple] {
   color: var(--primary);
   font-size: clamp(20px, 2vw, 30px);
   line-height: 1.1;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .dashboard-grid {
@@ -492,6 +494,7 @@ select[multiple] {
   padding: 8px 12px;
   color: var(--muted);
   background: transparent;
+  font-weight: 500;
   text-transform: capitalize;
 }
 
@@ -517,7 +520,7 @@ select[multiple] {
   color: var(--muted);
   font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-align: left;
   text-transform: uppercase;
@@ -542,7 +545,7 @@ select[multiple] {
   padding: 0 8px;
   border-radius: 9999px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .status-pill.active {
@@ -562,7 +565,7 @@ select[multiple] {
   border-radius: 6px;
   color: var(--primary);
   background: #fff;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .table-action:disabled {
@@ -577,7 +580,7 @@ select[multiple] {
   padding: 0;
   color: var(--primary);
   background: transparent;
-  font-weight: 800;
+  font-weight: 600;
   text-align: left;
   text-decoration: underline;
   text-decoration-color: rgba(31, 79, 69, 0.32);
@@ -685,12 +688,12 @@ select[multiple] {
 
 .positive {
   color: var(--primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .negative {
   color: #a63f3f;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .empty-state,
