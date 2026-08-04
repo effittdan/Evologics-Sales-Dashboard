@@ -68,6 +68,39 @@ describe("dashboard filters", () => {
       })
     ).toEqual([wholesale]);
   });
+
+  it("can report backdated transactions by their created date", () => {
+    const backdated = makeTransaction({
+      transactionDate: "2026-07-31",
+      dateCreated: "2026-08-03T07:02:00.000Z",
+      revenue: 65576.88
+    });
+    const sameDay = makeTransaction({
+      documentNumber: "EV-2",
+      transactionDate: "2026-08-03",
+      dateCreated: "2026-08-03T13:00:00.000Z",
+      revenue: 12234.24
+    });
+    const createdDateFilters = {
+      ...emptyFilters,
+      dateBasis: "created" as const,
+      datePreset: "custom" as const,
+      customStart: "2026-08-03",
+      customEnd: "2026-08-03"
+    };
+
+    expect(applyFilters([backdated, sameDay], createdDateFilters)).toHaveLength(2);
+    const createdDaily = timeSeries([backdated, sameDay], "day", "created");
+    expect(createdDaily).toHaveLength(1);
+    expect(createdDaily[0]).toMatchObject({ period: "2026-08-03", transactions: 2 });
+    expect(createdDaily[0].revenue).toBeCloseTo(77811.12, 2);
+    expect(
+      applyFilters([backdated, sameDay], {
+        ...createdDateFilters,
+        dateBasis: "transaction"
+      })
+    ).toEqual([sameDay]);
+  });
 });
 
 function makeTransaction(patch: Partial<SalesTransaction> = {}): SalesTransaction {

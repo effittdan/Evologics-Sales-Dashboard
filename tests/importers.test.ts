@@ -3,12 +3,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   normalizeSalesTransactionRows,
+  parseNetSuiteSavedSearchCSV,
   parseNetSuiteSpreadsheetMLReport
 } from "../src/lib/importers";
 
 const root = process.cwd();
 const ytdSample = "CustomSalesbyCustomerDetail-699 YTD.xls";
 const weeklySample = "Weekly Report Test 7-9-26.xls";
+const savedSearchYtdSample = "WRScheduledPrevDaySalesTransSearchEVOOnlyResults237 YTD thru July.csv";
+const dailyCsvSample = "08032026.csv";
 
 describe("NetSuite SpreadsheetML import adapters", () => {
   it("detects a YTD header on row 7 and excludes group/total rows", () => {
@@ -21,7 +24,7 @@ describe("NetSuite SpreadsheetML import adapters", () => {
     expect(parsed.excludedGroupRows).toBe(1);
     expect(parsed.excludedTotalRows).toBe(1);
     expect(transactions).toHaveLength(2);
-    expect(sumRevenue(transactions)).toBe(6200);
+    expect(sumRevenue(transactions)).toBe(3000);
     expect(transactions[0]).toMatchObject({
       customerCode: "CUST00001",
       customerName: "Alpha Hospital",
@@ -111,6 +114,36 @@ describe("NetSuite SpreadsheetML import adapters", () => {
     expect(quantity).toBe(382);
     expect(transactions[0].transactionDate).toBe("2026-06-29");
     expect(transactions.at(-1)?.transactionDate).toBe("2026-07-02");
+  });
+
+  const savedSearchYtdIt = existsSync(join(root, savedSearchYtdSample)) ? it : it.skip;
+  savedSearchYtdIt("reconciles the Saved Search YTD CSV through July", () => {
+    const text = readFileSync(join(root, savedSearchYtdSample), "utf8");
+    const parsed = parseNetSuiteSavedSearchCSV(savedSearchYtdSample, text);
+    const transactions = normalizeSalesTransactionRows(parsed.rows);
+
+    expect(parsed.excludedTotalRows).toBe(1);
+    expect(transactions).toHaveLength(2821);
+    expect(sumRevenue(transactions)).toBeCloseTo(9599861.07, 2);
+    expect(transactions.at(-1)?.transactionDate).toBe("2026-07-31");
+  });
+
+  const dailyCsvIt = existsSync(join(root, dailyCsvSample)) ? it : it.skip;
+  dailyCsvIt("reads every daily CSV transaction while excluding the footer total", () => {
+    const text = readFileSync(join(root, dailyCsvSample), "utf8");
+    const parsed = parseNetSuiteSavedSearchCSV(dailyCsvSample, text);
+    const transactions = normalizeSalesTransactionRows(parsed.rows);
+    const quantity = transactions.reduce((total, row) => total + row.quantity, 0);
+    const createdOnAugustThird = transactions.filter(
+      (row) => row.dateCreated?.slice(0, 10) === "2026-08-03"
+    );
+
+    expect(parsed.excludedTotalRows).toBe(1);
+    expect(transactions).toHaveLength(16);
+    expect(quantity).toBe(72);
+    expect(sumRevenue(transactions)).toBeCloseTo(77811.12, 2);
+    expect(createdOnAugustThird).toHaveLength(16);
+    expect(sumRevenue(createdOnAugustThird)).toBeCloseTo(77811.12, 2);
   });
 });
 

@@ -46,10 +46,13 @@ import {
   productPerformance,
   repPerformance,
   resolveDateRange,
+  salesDate,
   salesTransactionKey,
   timeSeries,
   topByRevenue,
-  type DashboardFilters
+  type DashboardFilters,
+  type DateBasis,
+  type TimeSeriesGrain
 } from "./lib/analytics";
 import {
   activeSessionUser,
@@ -106,7 +109,7 @@ export function App() {
   );
   const [filters, setFilters] = useState<DashboardFilters>(emptyFilters);
   const [activeView, setActiveView] = useState("overview");
-  const [trendGrain, setTrendGrain] = useState<"month" | "quarter" | "year">("month");
+  const [trendGrain, setTrendGrain] = useState<TimeSeriesGrain>("month");
   const [repMappings, setRepMappings] = useState<SalesRepMapping[]>(() =>
     loadStored(storageKeys.reps, [])
   );
@@ -255,9 +258,9 @@ export function App() {
   const metrics = useMemo(() => kpis(filtered), [filtered]);
   const sourceRange = dateRange(enriched);
   const importedSourceRange = useMemo(() => combineQualityRanges(quality), [quality]);
-  const filteredRange = dateRange(filtered);
+  const filteredRange = dateRange(filtered, filters.dateBasis);
   const selectedRange = resolveDateRange(enriched, filters);
-  const yearsLoaded = new Set(enriched.map((row) => row.transactionDate.slice(0, 4))).size;
+  const yearsLoaded = new Set(enriched.map((row) => salesDate(row, filters.dateBasis).slice(0, 4))).size;
 
   async function importFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -309,7 +312,9 @@ export function App() {
       messages.push(
         skippedDuplicateFile
           ? `${file.name}: already imported, skipped`
-          : `${file.name}: ${accepted.length.toLocaleString()} added, ${skippedDuplicateRows.toLocaleString()} skipped`
+          : `${file.name}: ${accepted.length.toLocaleString()} added (${formatCurrency(
+              accepted.reduce((total, row) => total + row.revenue, 0)
+            )}), ${skippedDuplicateRows.toLocaleString()} skipped`
       );
     }
 
@@ -521,7 +526,9 @@ export function App() {
             <p className="subtle">
               {filtered.length.toLocaleString()} of {enriched.length.toLocaleString()} normalized line
               items
-              {filteredRange ? ` | active transactions ${filteredRange.start} to ${filteredRange.end}` : ""}
+              {filteredRange
+                ? ` | active ${filters.dateBasis === "created" ? "created dates" : "transaction dates"} ${filteredRange.start} to ${filteredRange.end}`
+                : ""}
             </p>
           </div>
           <div className="import-actions">
@@ -592,13 +599,16 @@ export function App() {
           <EmptyState />
         ) : (
           <>
-            {activeView === "overview" && <Overview rows={filtered} metrics={metrics} />}
+            {activeView === "overview" && (
+              <Overview rows={filtered} metrics={metrics} dateBasis={filters.dateBasis} />
+            )}
             {activeView === "trend" && (
               <TrendView
                 rows={filtered}
                 grain={trendGrain}
                 setGrain={setTrendGrain}
                 yearsLoaded={yearsLoaded}
+                dateBasis={filters.dateBasis}
               />
             )}
             {activeView === "reps" && (
@@ -610,6 +620,7 @@ export function App() {
                 setMappings={setRepMappings}
                 onClearReport={() => setSelectedRepVendor(null)}
                 onSelectReport={setSelectedRepVendor}
+                dateBasis={filters.dateBasis}
               />
             )}
             {activeView === "products" && (
@@ -618,9 +629,12 @@ export function App() {
                 allRows={enriched}
                 enrichments={skuEnrichments}
                 setEnrichments={setSkuEnrichments}
+                dateBasis={filters.dateBasis}
               />
             )}
-            {activeView === "customers" && <CustomerGeoView rows={filtered} />}
+            {activeView === "customers" && (
+              <CustomerGeoView rows={filtered} dateBasis={filters.dateBasis} />
+            )}
             {activeView === "quality" && (
               <QualityView
                 rows={enriched}
@@ -950,6 +964,21 @@ function FilterPanel({
         </button>
       </div>
       <div className="filter-grid">
+        <div className="filter-field">
+          <span>Date basis</span>
+          <div className="segmented date-basis-control">
+            {(["transaction", "created"] as const).map((basis) => (
+              <button
+                key={basis}
+                className={filters.dateBasis === basis ? "active" : ""}
+                onClick={() => set("dateBasis", basis)}
+                type="button"
+              >
+                {basis === "transaction" ? "Transaction date" : "Date created"}
+              </button>
+            ))}
+          </div>
+        </div>
         <label>
           Date range
           <select value={filters.datePreset} onChange={(event) => set("datePreset", event.target.value as never)}>
@@ -1046,9 +1075,17 @@ function FilterPanel({
   );
 }
 
-function Overview({ rows, metrics }: { rows: SalesTransaction[]; metrics: ReturnType<typeof kpis> }) {
-  const monthly = timeSeries(rows, "month");
-  const quarterly = timeSeries(rows, "quarter");
+function Overview({
+  rows,
+  metrics,
+  dateBasis
+}: {
+  rows: SalesTransaction[];
+  metrics: ReturnType<typeof kpis>;
+  dateBasis: DateBasis;
+}) {
+  const monthly = timeSeries(rows, "month", dateBasis);
+  const quarterly = timeSeries(rows, "quarter", dateBasis);
   const topReps = topByRevenue(rows, "salesRepVendor", 10);
   const topProducts = topByRevenue(rows, "sku", 10);
   const salesCategories = topByRevenue(rows, "salesCategory", 10);
@@ -1092,14 +1129,16 @@ function TrendView({
   rows,
   grain,
   setGrain,
-  yearsLoaded
+  yearsLoaded,
+  dateBasis
 }: {
   rows: SalesTransaction[];
-  grain: "month" | "quarter" | "year";
-  setGrain: (grain: "month" | "quarter" | "year") => void;
+  grain: TimeSeriesGrain;
+  setGrain: (grain: TimeSeriesGrain) => void;
   yearsLoaded: number;
+  dateBasis: DateBasis;
 }) {
-  const data = timeSeries(rows, grain);
+  const data = timeSeries(rows, grain, dateBasis);
 
   return (
     <section className="view-stack">
@@ -1109,7 +1148,7 @@ function TrendView({
           <h2>Sales trend</h2>
         </div>
         <div className="segmented">
-          {(["month", "quarter", "year"] as const).map((item) => (
+          {(["day", "month", "quarter", "year"] as const).map((item) => (
             <button key={item} className={grain === item ? "active" : ""} onClick={() => setGrain(item)}>
               {item}
             </button>
@@ -1167,7 +1206,8 @@ function RepView({
   selectedRepVendor,
   setMappings,
   onClearReport,
-  onSelectReport
+  onSelectReport,
+  dateBasis
 }: {
   rows: SalesTransaction[];
   allRows: SalesTransaction[];
@@ -1176,8 +1216,9 @@ function RepView({
   setMappings: (mappings: SalesRepMapping[]) => void;
   onClearReport: () => void;
   onSelectReport: (name: string) => void;
+  dateBasis: DateBasis;
 }) {
-  const data = repPerformance(rows);
+  const data = repPerformance(rows, dateBasis);
   const reps = optionValues(allRows, "salesRepVendor");
   const selectedRows = selectedRepVendor
     ? rows.filter((row) => (row.salesRepVendor || "Unassigned") === selectedRepVendor)
@@ -1194,10 +1235,11 @@ function RepView({
           mapping={selectedMapping}
           rows={selectedRows}
           onBack={onClearReport}
+          dateBasis={dateBasis}
         />
       ) : null}
       <ChartCard title="Revenue Trend for Current Rep / Vendor Filter">
-        <RevenueArea data={timeSeries(rows, "month")} />
+        <RevenueArea data={timeSeries(rows, "month", dateBasis)} />
       </ChartCard>
       <div className="table-card">
         <h2>Sales Rep / Distributor Performance</h2>
@@ -1247,16 +1289,18 @@ function RepVendorReport({
   entityName,
   mapping,
   rows,
-  onBack
+  onBack,
+  dateBasis
 }: {
   entityName: string;
   mapping?: SalesRepMapping;
   rows: SalesTransaction[];
   onBack: () => void;
+  dateBasis: DateBasis;
 }) {
   const metrics = kpis(rows);
-  const range = dateRange(rows);
-  const weekly = timeSeries(rows, "week").slice(-10);
+  const range = dateRange(rows, dateBasis);
+  const weekly = timeSeries(rows, "week", dateBasis).slice(-10);
   const topClients = customerPerformance(rows).slice(0, 10);
   const topProducts = productPerformance(rows).slice(0, 10);
   const entityType =
@@ -1380,12 +1424,14 @@ function ProductView({
   rows,
   allRows,
   enrichments,
-  setEnrichments
+  setEnrichments,
+  dateBasis
 }: {
   rows: SalesTransaction[];
   allRows: SalesTransaction[];
   enrichments: SkuEnrichment[];
   setEnrichments: (enrichments: SkuEnrichment[]) => void;
+  dateBasis: DateBasis;
 }) {
   const data = productPerformance(rows);
   const topSkus = data.slice(0, 12);
@@ -1393,7 +1439,7 @@ function ProductView({
   return (
     <section className="view-stack">
       <ChartCard title="Revenue by SKU Over Time">
-        <RevenueArea data={timeSeries(rows, "month")} />
+        <RevenueArea data={timeSeries(rows, "month", dateBasis)} />
       </ChartCard>
       <div className="table-card">
         <h2>Product Performance</h2>
@@ -1438,7 +1484,7 @@ function ProductView({
   );
 }
 
-function CustomerGeoView({ rows }: { rows: SalesTransaction[] }) {
+function CustomerGeoView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBasis: DateBasis }) {
   return (
     <section className="view-stack">
       <div className="dashboard-grid">
@@ -1446,7 +1492,7 @@ function CustomerGeoView({ rows }: { rows: SalesTransaction[] }) {
           <RevenueBar data={topByRevenue(rows, "shippingState", 15)} nameKey="name" />
         </ChartCard>
         <ChartCard title="Customer Trend">
-          <RevenueArea data={timeSeries(rows, "month")} />
+          <RevenueArea data={timeSeries(rows, "month", dateBasis)} />
         </ChartCard>
       </div>
       <div className="table-card">
@@ -1811,8 +1857,14 @@ function SoftEmpty({ text }: { text: string }) {
   return <div className="soft-empty">{text}</div>;
 }
 
-function grainLabel(grain: "month" | "quarter" | "year") {
-  return grain === "month" ? "Month-over-month" : grain === "quarter" ? "Quarter-over-quarter" : "Year-over-year";
+function grainLabel(grain: TimeSeriesGrain) {
+  if (grain === "day") return "Day-over-day";
+  if (grain === "week") return "Week-over-week";
+  return grain === "month"
+    ? "Month-over-month"
+    : grain === "quarter"
+      ? "Quarter-over-quarter"
+      : "Year-over-year";
 }
 
 function loadStored<T>(key: string, fallback: T): T {

@@ -8,9 +8,11 @@ import type {
 } from "../types";
 
 export type DatePreset = "all" | "ytd" | "quarter" | "month" | "previousMonth" | "custom";
+export type DateBasis = "transaction" | "created";
 
 export type DashboardFilters = {
   datePreset: DatePreset;
+  dateBasis: DateBasis;
   customStart?: string;
   customEnd?: string;
   salesRepVendor: string[];
@@ -26,6 +28,7 @@ export type DashboardFilters = {
 
 export const emptyFilters: DashboardFilters = {
   datePreset: "all",
+  dateBasis: "transaction",
   salesRepVendor: [],
   salesGroup: [],
   salesEntityType: [],
@@ -142,8 +145,9 @@ export function applyEnrichments(
 export function applyFilters(rows: SalesTransaction[], filters: DashboardFilters) {
   const range = resolveDateRange(rows, filters);
   return rows.filter((row) => {
-    if (range.start && row.transactionDate < range.start) return false;
-    if (range.end && row.transactionDate > range.end) return false;
+    const rowDate = salesDate(row, filters.dateBasis);
+    if (range.start && rowDate < range.start) return false;
+    if (range.end && rowDate > range.end) return false;
     if (!matches(row.salesRepVendor, filters.salesRepVendor)) return false;
     if (!matches(row.salesGroup, filters.salesGroup)) return false;
     if (!matches(row.salesEntityType, filters.salesEntityType)) return false;
@@ -158,7 +162,7 @@ export function applyFilters(rows: SalesTransaction[], filters: DashboardFilters
 }
 
 export function resolveDateRange(rows: SalesTransaction[], filters: DashboardFilters) {
-  const range = dateRange(rows);
+  const range = dateRange(rows, filters.dateBasis);
   if (!range) return {};
   const anchor = parseDate(range.end);
   if (filters.datePreset === "all") return {};
@@ -203,10 +207,14 @@ export function kpis(rows: SalesTransaction[]) {
   };
 }
 
-export type TimeSeriesGrain = "week" | "month" | "quarter" | "year";
+export type TimeSeriesGrain = "day" | "week" | "month" | "quarter" | "year";
 
-export function timeSeries(rows: SalesTransaction[], grain: TimeSeriesGrain) {
-  const grouped = groupBy(rows, (row) => periodKey(row.transactionDate, grain));
+export function timeSeries(
+  rows: SalesTransaction[],
+  grain: TimeSeriesGrain,
+  dateBasis: DateBasis = "transaction"
+) {
+  const grouped = groupBy(rows, (row) => periodKey(salesDate(row, dateBasis), grain));
   return Object.entries(grouped)
     .map(([period, periodRows]) => ({
       period,
@@ -237,7 +245,7 @@ export function topByRevenue(
     .slice(0, limit);
 }
 
-export function repPerformance(rows: SalesTransaction[]) {
+export function repPerformance(rows: SalesTransaction[], dateBasis: DateBasis = "transaction") {
   return Object.entries(groupBy(rows, (row) => row.salesRepVendor || "Unassigned"))
     .map(([name, groupRows]) => ({
       name,
@@ -246,8 +254,8 @@ export function repPerformance(rows: SalesTransaction[]) {
       transactions: groupRows.length,
       customerCount: unique(groupRows.map((row) => row.customerName)).length,
       topProduct: topByRevenue(groupRows, "sku", 1)[0]?.name ?? "None",
-      momChange: periodChange(groupRows, "month"),
-      qoqChange: periodChange(groupRows, "quarter")
+      momChange: periodChange(groupRows, "month", dateBasis),
+      qoqChange: periodChange(groupRows, "quarter", dateBasis)
     }))
     .sort((a, b) => b.revenue - a.revenue);
 }
@@ -282,10 +290,16 @@ export function optionValues(rows: SalesTransaction[], key: keyof SalesTransacti
   );
 }
 
-export function dateRange(rows: SalesTransaction[]) {
+export function dateRange(rows: SalesTransaction[], dateBasis: DateBasis = "transaction") {
   if (!rows.length) return undefined;
-  const dates = rows.map((row) => row.transactionDate).filter(Boolean).sort();
+  const dates = rows.map((row) => salesDate(row, dateBasis)).filter(Boolean).sort();
   return dates.length ? { start: dates[0], end: dates[dates.length - 1] } : undefined;
+}
+
+export function salesDate(row: SalesTransaction, dateBasis: DateBasis = "transaction") {
+  return dateBasis === "created" && row.dateCreated
+    ? row.dateCreated.slice(0, 10)
+    : row.transactionDate;
 }
 
 export function countDuplicateRows(rows: SalesTransaction[]) {
@@ -356,14 +370,19 @@ function matches(value: string | undefined, allowed: string[]) {
 function periodKey(dateValue: string, grain: TimeSeriesGrain) {
   const date = parseDate(dateValue);
   const year = date.getUTCFullYear();
+  if (grain === "day") return isoDate(date);
   if (grain === "week") return isoDate(startOfWeek(date));
   if (grain === "year") return String(year);
   if (grain === "quarter") return `${year}-Q${Math.floor(date.getUTCMonth() / 3) + 1}`;
   return `${year}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function periodChange(rows: SalesTransaction[], grain: "month" | "quarter") {
-  const series = timeSeries(rows, grain);
+function periodChange(
+  rows: SalesTransaction[],
+  grain: "month" | "quarter",
+  dateBasis: DateBasis
+) {
+  const series = timeSeries(rows, grain, dateBasis);
   return series.at(-1)?.changePct ?? null;
 }
 

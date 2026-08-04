@@ -354,6 +354,26 @@ label {
   font-weight: 700;
 }
 
+.filter-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.date-basis-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.date-basis-control button {
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
 select,
 input {
   width: 100%;

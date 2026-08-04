@@ -123,17 +123,28 @@ export function parseNetSuiteSavedSearchCSV(
     transform: (value) => String(value ?? "").trim()
   });
   const sourceReportType = detectReportType(parsed.meta.fields ?? []);
+  let excludedTotalRows = 0;
+  const rows: RawSalesRow[] = [];
 
-  return {
-    sourceFile,
-    sourceReportType,
-    rows: (parsed.data ?? []).map((fields, index) => ({
+  (parsed.data ?? []).forEach((fields, index) => {
+    const firstNonEmpty = Object.values(fields).find(Boolean) ?? "";
+    if (/^(?:overall\s+)?total\b/i.test(firstNonEmpty)) {
+      excludedTotalRows += 1;
+      return;
+    }
+    rows.push({
       sourceFile,
       sourceReportType,
       sourceRowNumber: index + 2,
       fields
-    })),
-    excludedTotalRows: 0,
+    });
+  });
+
+  return {
+    sourceFile,
+    sourceReportType,
+    rows,
+    excludedTotalRows,
     excludedGroupRows: 0,
     parseErrors: parsed.errors.map((error) => error.message)
   };
@@ -215,6 +226,8 @@ function normalizeRow(
   const repMapping = salesRepVendor ? repMap.get(salesRepVendor) : undefined;
   const skuEnrichment = sku ? skuMap.get(sku) : undefined;
   const transactionType = get("Transaction Type", "Type", "transactionType");
+  const isCreditMemo = /credit memo/i.test(transactionType);
+  const rawRevenue = toNumber(get("Total Revenue", "Amount", "revenue"));
   const productClass =
     get("Class", "Product Class", "Item Class", "productClass") ||
     skuEnrichment?.productClass ||
@@ -253,7 +266,7 @@ function normalizeRow(
     salesCategory,
     quantity: toNumber(get("Quantity", "quantity")),
     unitPrice: toNumber(get("Unit Price", "Item Rate", "unitPrice")),
-    revenue: toNumber(get("Total Revenue", "Amount", "revenue")),
+    revenue: isCreditMemo ? -Math.abs(rawRevenue) : rawRevenue,
     salesRepVendor,
     salesEntityType: repMapping?.salesEntityType ?? "Unknown",
     salesGroup: repMapping?.salesGroup,
@@ -264,7 +277,7 @@ function normalizeRow(
       "shippingState"
     ),
     dateCreated: toIsoDateTime(get("Date Created", "dateCreated")),
-    isCreditMemo: /credit memo/i.test(transactionType)
+    isCreditMemo
   };
 }
 
