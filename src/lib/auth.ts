@@ -1,6 +1,9 @@
 import type { AppSession, AppUser, AppUserRole } from "../types";
 
 const sharedSeedPasswordHash = "3c591eded51fdc8123d621739d6d1d4f252a0e70b6350c09b990d30e352edefb";
+const legacyUserEmails: Record<string, string> = {
+  "ryan@evologicsamerica.com": "rgray@evologicsamerica.com"
+};
 
 export const seedUsers: AppUser[] = [
   {
@@ -51,7 +54,7 @@ export const seedUsers: AppUser[] = [
   {
     id: "usr_ryan_gray",
     name: "Ryan Gray",
-    email: "ryan@evologicsamerica.com",
+    email: "rgray@evologicsamerica.com",
     role: "user",
     status: "Active",
     passwordHash: sharedSeedPasswordHash,
@@ -80,7 +83,11 @@ export const seedUsers: AppUser[] = [
 export function initializeUsers(storedUsers: AppUser[] | undefined | null) {
   if (!storedUsers?.length) return seedUsers;
   const usersByEmail = new Map(
-    storedUsers.map((user) => [user.email.toLowerCase(), normalizeStoredUser(user)])
+    storedUsers.map((user) => {
+      const normalized = normalizeStoredUser(user);
+      const email = legacyUserEmails[normalized.email.toLowerCase()] ?? normalized.email.toLowerCase();
+      return [email, { ...normalized, email }] as const;
+    })
   );
   seedUsers.forEach((seedUser) => {
     const storedUser = usersByEmail.get(seedUser.email.toLowerCase());

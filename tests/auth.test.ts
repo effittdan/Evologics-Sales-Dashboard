@@ -18,7 +18,7 @@ describe("local auth", () => {
       ["Wendy Reyes", "wendy@evologicsamerica.com", "administrator"],
       ["Eda Brown", "eda@evologicsamerica.com", "user"],
       ["Mike Crescenzo", "mike@evologicsamerica.com", "user"],
-      ["Ryan Gray", "ryan@evologicsamerica.com", "user"],
+      ["Ryan Gray", "rgray@evologicsamerica.com", "user"],
       ["Jim Courville", "jim@evologicsamerica.com", "user"],
       ["Sam Williamson", "sam@evologicsamerica.com", "user"]
     ];
@@ -47,6 +47,23 @@ describe("local auth", () => {
 
     expect(theresa?.role).toBe("administrator");
     expect(theresa?.lastLoginAt).toBe("2026-07-09T14:20:00.000Z");
+  });
+
+  it("migrates Ryan's legacy approved email to the live Netlify Identity email", () => {
+    const ryan = seedUsers.find((user) => user.id === "usr_ryan_gray");
+    const users = initializeUsers([
+      {
+        ...ryan!,
+        email: "ryan@evologicsamerica.com",
+        lastLoginAt: "2026-08-05T14:20:00.000Z"
+      }
+    ]);
+
+    expect(users.filter((user) => user.id === "usr_ryan_gray")).toHaveLength(1);
+    expect(users.find((user) => user.id === "usr_ryan_gray")).toMatchObject({
+      email: "rgray@evologicsamerica.com",
+      lastLoginAt: "2026-08-05T14:20:00.000Z"
+    });
   });
 
   it("authenticates active local users by password hash", async () => {

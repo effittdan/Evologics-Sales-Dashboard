@@ -71,12 +71,14 @@ import {
 } from "./lib/importers";
 import {
   checkNetlifyIdentitySettings,
+  completeNetlifyIdentityChallenge,
   createNetlifyIdentityAccount,
   initializeNetlifyIdentity,
   loginWithNetlifyIdentity,
   logoutNetlifyIdentity,
   shouldUseNetlifyIdentity,
-  watchNetlifyIdentity
+  watchNetlifyIdentity,
+  type NetlifyAuthChallenge
 } from "./lib/netlifyAuth";
 import {
   loadSharedSalesLedger,
@@ -127,6 +129,7 @@ export function App() {
   const [importMessage, setImportMessage] = useState("");
   const [authLoading, setAuthLoading] = useState(() => shouldUseNetlifyIdentity());
   const [authNotice, setAuthNotice] = useState("");
+  const [authChallenge, setAuthChallenge] = useState<NetlifyAuthChallenge | null>(null);
   const [selectedRepVendor, setSelectedRepVendor] = useState<string | null>(null);
   const [sharedLedgerMessage, setSharedLedgerMessage] = useState("");
   const [sharedLedgerMeta, setSharedLedgerMeta] = useState<{
@@ -187,8 +190,9 @@ export function App() {
     }
 
     initializeNetlifyIdentity()
-      .then((netlifyUser) => {
+      .then(({ user: netlifyUser, challenge }) => {
         if (!mounted) return;
+        setAuthChallenge(challenge);
         applyNetlifyUser(netlifyUser?.email);
       })
       .catch((error) => {
@@ -445,6 +449,29 @@ export function App() {
     return "";
   }
 
+  async function completeAuthChallenge(password: string) {
+    if (!authChallenge) return "The invite or recovery link is no longer active.";
+    const result = await completeNetlifyIdentityChallenge(authChallenge, password);
+    if (!result.user) return result.error || "Netlify Identity password setup failed.";
+
+    const approvedUser = approvedUserForEmail(users, result.user.email);
+    if (!approvedUser || approvedUser.status !== "Active") {
+      await logoutNetlifyIdentity();
+      setAuthChallenge(null);
+      return "This Netlify user is not approved for the Evologics dashboard.";
+    }
+
+    const signedInAt = new Date().toISOString();
+    setUsers((current) =>
+      current.map((item) =>
+        item.id === approvedUser.id ? { ...item, lastLoginAt: signedInAt } : item
+      )
+    );
+    setSession({ userId: approvedUser.id, signedInAt, provider: "netlify" });
+    setAuthChallenge(null);
+    return "";
+  }
+
   async function signOut() {
     if (netlifyIdentityEnabled) {
       await logoutNetlifyIdentity();
@@ -475,6 +502,15 @@ export function App() {
 
   if (authLoading) {
     return <LoadingAuthPanel />;
+  }
+
+  if (authChallenge) {
+    return (
+      <CredentialSetupPanel
+        mode={authChallenge.type}
+        onSubmit={completeAuthChallenge}
+      />
+    );
   }
 
   if (!currentUser) {
@@ -658,6 +694,83 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function CredentialSetupPanel({
+  mode,
+  onSubmit
+}: {
+  mode: NetlifyAuthChallenge["type"];
+  onSubmit: (password: string) => Promise<string>;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (password.length < 8) {
+      setError("Use a password with at least 8 characters.");
+      return;
+    }
+    if (password !== confirmation) {
+      setError("The passwords do not match.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const message = await onSubmit(password);
+    if (message) setError(message);
+    setIsSubmitting(false);
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-panel">
+        <div className="login-brand">
+          <img src="/evologics-logo-wide.png" alt="Evologics" />
+          <span>Sales Analytics</span>
+        </div>
+        <div>
+          <p className="eyebrow">Netlify Identity</p>
+          <h1>{mode === "invite" ? "Create your password" : "Reset your password"}</h1>
+          <p className="subtle">
+            {mode === "invite"
+              ? "Finish accepting your dashboard invitation."
+              : "Choose a new password for your dashboard account."}
+          </p>
+        </div>
+        <form className="login-form" onSubmit={(event) => void submit(event)}>
+          <label>
+            New password
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          <label>
+            Confirm password
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+            />
+          </label>
+          {error ? <div className="form-error">{error}</div> : null}
+          <button className="upload-button login-submit" type="submit" disabled={isSubmitting}>
+            <LockKeyhole size={18} />
+            {mode === "invite" ? "Accept invitation" : "Save new password"}
+          </button>
+        </form>
+        <p className="security-note">Your password is stored and managed by Netlify Identity.</p>
+      </section>
+    </main>
   );
 }
 

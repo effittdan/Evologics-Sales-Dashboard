@@ -1,11 +1,13 @@
 import {
+  acceptInvite,
   AuthError,
   getUser,
   handleAuthCallback,
   login,
   logout,
   onAuthChange,
-  signup
+  signup,
+  updateUser
 } from "@netlify/identity";
 
 export type NetlifyAuthUser = {
@@ -18,14 +20,28 @@ export type NetlifyAuthUser = {
   };
 };
 
+export type NetlifyAuthChallenge =
+  | { type: "recovery" }
+  | { type: "invite"; token: string };
+
 export function shouldUseNetlifyIdentity() {
   if (typeof window === "undefined") return false;
   return !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
 export async function initializeNetlifyIdentity() {
-  await handleAuthCallback();
-  return normalizeNetlifyUser(await getUser());
+  const callback = await handleAuthCallback();
+  const challenge: NetlifyAuthChallenge | null =
+    callback?.type === "recovery"
+      ? { type: "recovery" }
+      : callback?.type === "invite" && callback.token
+        ? { type: "invite", token: callback.token }
+        : null;
+
+  return {
+    user: normalizeNetlifyUser(await getUser()),
+    challenge
+  };
 }
 
 export async function checkNetlifyIdentitySettings() {
@@ -85,6 +101,33 @@ export async function createNetlifyIdentityAccount(email: string, password: stri
       user: null,
       needsConfirmation: false,
       error: error instanceof Error ? error.message : "Netlify Identity account creation failed."
+    };
+  }
+}
+
+export async function completeNetlifyIdentityChallenge(
+  challenge: NetlifyAuthChallenge,
+  password: string
+) {
+  try {
+    const user =
+      challenge.type === "invite"
+        ? await acceptInvite(challenge.token, password)
+        : await updateUser({ password });
+    return { user: normalizeNetlifyUser(user), error: "" };
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return {
+        user: null,
+        error:
+          error.status === 422
+            ? "That password could not be saved. Use at least 8 characters and try again."
+            : error.message
+      };
+    }
+    return {
+      user: null,
+      error: error instanceof Error ? error.message : "Netlify Identity password setup failed."
     };
   }
 }
