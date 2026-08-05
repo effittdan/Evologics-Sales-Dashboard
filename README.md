@@ -11,6 +11,7 @@ Source-agnostic sales analytics dashboard for Evologics NetSuite exports.
 - Uses Netlify Identity for access and a Supabase-backed shared ledger for deployed sales data.
 - Persists import history and accepted transactions in shared storage on the deployed site, with browser local storage as the localhost fallback.
 - Prevents repeat imports by tracking file fingerprints and previously accepted transaction keys.
+- Feeds the National Sales Map from the same normalized, filtered transactions without exposing the raw ledger publicly.
 
 ## Local Development
 
@@ -40,6 +41,21 @@ Localhost keeps using browser local storage so development still works without S
 Re-importing the exact same file is recorded in the quality ledger but contributes zero new transactions. Rows already accepted from earlier imports are skipped on later imports.
 
 Duplicate-looking rows inside the same newly imported file are preserved because NetSuite can legitimately export separate line items that appear identical.
+
+## National Sales Map
+
+The National Sales Map is an authenticated dashboard view backed by the active
+`SalesTransaction` filter result. The dashboard aggregates transactions by
+shipping state, product, and customer, then sends the summary to the standalone
+map with a versioned `postMessage` contract.
+
+The map receives no patient, physician, document-number, unit-price, or raw
+transaction-line details. When the standalone map is opened outside the Sales
+Analytics dashboard, it continues to show its committed snapshot instead of
+requesting the private Supabase ledger.
+
+Local map development defaults to `http://127.0.0.1:5176/`. Set
+`VITE_SALES_MAP_URL` to override the embedded map URL.
 
 ## Authentication
 

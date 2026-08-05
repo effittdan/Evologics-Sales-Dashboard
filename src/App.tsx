@@ -1,10 +1,9 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   AlertTriangle,
   BarChart3,
   Database,
-  ExternalLink,
   FileUp,
   LockKeyhole,
   LogOut,
@@ -84,6 +83,7 @@ import {
   saveSharedSalesLedger,
   shouldUseSharedLedger
 } from "./lib/sharedLedger";
+import { buildSalesMapPayload } from "./lib/mapData";
 import type {
   AppSession,
   AppUser,
@@ -511,16 +511,9 @@ export function App() {
           <NavButton icon={<Database />} id="customers" active={activeView} onClick={setActiveView}>
             Customers & States
           </NavButton>
-          <a
-            className="external-nav-link"
-            href="https://evologics-map.netlify.app/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <MapPinned />
-            <span>National Sales Map</span>
-            <ExternalLink className="nav-external-icon" aria-hidden="true" />
-          </a>
+          <NavButton icon={<MapPinned />} id="map" active={activeView} onClick={setActiveView}>
+            National Sales Map
+          </NavButton>
           <NavButton icon={<AlertTriangle />} id="quality" active={activeView} onClick={setActiveView}>
             Import Quality
           </NavButton>
@@ -646,6 +639,13 @@ export function App() {
             )}
             {activeView === "customers" && (
               <CustomerGeoView rows={filtered} dateBasis={filters.dateBasis} />
+            )}
+            {activeView === "map" && (
+              <NationalSalesMap
+                rows={filtered}
+                dateBasis={filters.dateBasis}
+                sourceUpdatedAt={sharedLedgerMeta?.updatedAt}
+              />
             )}
             {activeView === "quality" && (
               <QualityView
@@ -1494,6 +1494,98 @@ function ProductView({
       />
     </section>
   );
+}
+
+function NationalSalesMap({
+  rows,
+  dateBasis,
+  sourceUpdatedAt
+}: {
+  rows: SalesTransaction[];
+  dateBasis: DateBasis;
+  sourceUpdatedAt?: string | null;
+}) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [mapConnected, setMapConnected] = useState(false);
+  const mapUrl = useMemo(resolveSalesMapUrl, []);
+  const mapOrigin = useMemo(() => new URL(mapUrl).origin, [mapUrl]);
+  const payload = useMemo(
+    () => buildSalesMapPayload(rows, { dateBasis, sourceUpdatedAt }),
+    [rows, dateBasis, sourceUpdatedAt]
+  );
+
+  useEffect(() => {
+    setMapConnected(false);
+
+    function sendMapData() {
+      frameRef.current?.contentWindow?.postMessage(
+        { type: "evologics:sales-map-data", payload },
+        mapOrigin
+      );
+    }
+
+    function handleMapMessage(event: MessageEvent) {
+      if (
+        event.origin === mapOrigin &&
+        event.source === frameRef.current?.contentWindow &&
+        event.data?.type === "evologics:sales-map-ready"
+      ) {
+        sendMapData();
+      }
+      if (
+        event.origin === mapOrigin &&
+        event.source === frameRef.current?.contentWindow &&
+        event.data?.type === "evologics:sales-map-rendered"
+      ) {
+        setMapConnected(true);
+      }
+    }
+
+    window.addEventListener("message", handleMapMessage);
+    sendMapData();
+    return () => window.removeEventListener("message", handleMapMessage);
+  }, [mapOrigin, payload]);
+
+  return (
+    <section className="sales-map-panel">
+      <div className="sales-map-heading">
+        <div>
+          <p className="eyebrow">Shared ledger geography</p>
+          <h2>National Sales Map</h2>
+        </div>
+        <div className={`sales-map-status${mapConnected ? " connected" : ""}`}>
+          <span aria-hidden="true" />
+          {mapConnected
+            ? `Live filtered data | ${payload.mappedStateCount.toLocaleString()} states`
+            : "Connecting to map"}
+        </div>
+      </div>
+      <iframe
+        ref={frameRef}
+        className="sales-map-frame"
+        src={mapUrl}
+        title="Evologics National Sales Map"
+        referrerPolicy="strict-origin"
+        onLoad={() =>
+          frameRef.current?.contentWindow?.postMessage(
+            { type: "evologics:sales-map-data", payload },
+            mapOrigin
+          )
+        }
+      />
+    </section>
+  );
+}
+
+function resolveSalesMapUrl() {
+  const configuredUrl = (
+    import.meta as ImportMeta & { env?: { VITE_SALES_MAP_URL?: string } }
+  ).env?.VITE_SALES_MAP_URL;
+  if (configuredUrl) return configuredUrl;
+  if (["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) {
+    return "http://127.0.0.1:5176/?embedded=1&v=20260805";
+  }
+  return "https://evologics-map.netlify.app/?embedded=1&v=20260805";
 }
 
 function CustomerGeoView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBasis: DateBasis }) {
