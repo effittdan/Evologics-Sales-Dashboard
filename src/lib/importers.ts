@@ -232,13 +232,15 @@ function normalizeRow(
     get("Class", "Product Class", "Item Class", "productClass") ||
     skuEnrichment?.productClass ||
     skuEnrichment?.category;
-  const salesCategory = get(
-    "Category",
-    "Sales Category",
-    "Customer Category",
-    "category",
-    "salesCategory",
-    "sales_category"
+  const salesCategory = normalizeSalesCategory(
+    get(
+      "Category",
+      "Sales Category",
+      "Customer Category",
+      "category",
+      "salesCategory",
+      "sales_category"
+    )
   );
 
   if (!transactionDate || !documentNumber || !sku) {
@@ -279,6 +281,20 @@ function normalizeRow(
     dateCreated: toIsoDateTime(get("Date Created", "dateCreated")),
     isCreditMemo
   };
+}
+
+function normalizeSalesCategory(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/[\s_-]+/g, "");
+  const categories: Record<string, string> = {
+    directretail: "Direct Retail",
+    shorttermcon: "Short Term Contract",
+    shorttermcontract: "Short Term Contract",
+    distributor: "Distributor",
+    wholesale: "Wholesale",
+    consignment: "Consignment",
+    consignmentretail: "Consignment Retail"
+  };
+  return categories[normalized] ?? value.trim();
 }
 
 function readSpreadsheetRow(row: unknown) {

@@ -5,6 +5,8 @@ import { handler as identitySignupHandler } from "../netlify/functions/identity-
 import { handler as identityValidateHandler } from "../netlify/functions/identity-validate.js";
 // @ts-expect-error Netlify functions are plain JavaScript deployment modules.
 import { handler as salesLedgerHandler } from "../netlify/functions/sales-ledger.js";
+import { config as nightlySalesEmailConfig } from "../netlify/functions/nightly-sales-email.mts";
+import { config as salesImportHistoryConfig } from "../netlify/functions/sales-import-history.mts";
 
 type NetlifyResponse = {
   statusCode: number;
@@ -12,6 +14,14 @@ type NetlifyResponse = {
 };
 
 describe("Netlify functions", () => {
+  it("schedules the nightly mailbox poll around both Central time UTC offsets", () => {
+    expect(nightlySalesEmailConfig.schedule).toBe("15 7-10 * * *");
+  });
+
+  it("exposes automated import history through the authenticated API route", () => {
+    expect(salesImportHistoryConfig.path).toBe("/api/sales-import-history");
+  });
+
   it("loads the shared ledger function as an ES module", async () => {
     expect(salesLedgerHandler).toBeTypeOf("function");
     const response = (await salesLedgerHandler({ httpMethod: "GET" }, {})) as NetlifyResponse;

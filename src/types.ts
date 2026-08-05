@@ -52,6 +52,7 @@ export type ParsedSalesRows = {
 
 export type ImportQualitySummary = {
   batchId: string;
+  importSource?: "Manual" | "Automated";
   sourceFile: string;
   sourceReportType: SourceReportType;
   sourceSheetName?: string;
@@ -85,6 +86,23 @@ export type ImportLedger = {
   quality: ImportQualitySummary[];
   importedFileFingerprints: string[];
   importedTransactionKeys: string[];
+};
+
+export type AutomatedImportJob = {
+  id: string;
+  source: string;
+  attachmentName: string;
+  senderEmail?: string | null;
+  subject?: string | null;
+  receivedAt?: string | null;
+  status: "processing" | "imported" | "duplicate" | "review_required" | "failed";
+  parsedRowCount: number;
+  acceptedTransactionCount: number;
+  skippedDuplicateRows: number;
+  totalRevenue: number;
+  errorMessage?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
 };
 
 export type SalesRepMapping = {

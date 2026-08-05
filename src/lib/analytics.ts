@@ -47,6 +47,7 @@ export function buildImportQualitySummary(
     batchId: string;
     importedAt: string;
     fileFingerprint: string;
+    importSource?: "Manual" | "Automated";
     acceptedTransactionCount?: number;
     skippedDuplicateRows?: number;
     skippedDuplicateFile?: boolean;
@@ -57,6 +58,7 @@ export function buildImportQualitySummary(
 
   return {
     batchId: options.batchId,
+    importSource: options.importSource ?? "Manual",
     sourceFile: parsed.sourceFile,
     sourceReportType: parsed.sourceReportType,
     sourceSheetName: parsed.sourceSheetName,

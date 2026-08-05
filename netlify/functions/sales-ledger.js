@@ -6,7 +6,7 @@ const approvedUsers = {
   "wendy@evologicsamerica.com": { roles: ["administrator"] },
   "eda@evologicsamerica.com": { roles: ["user"] },
   "mike@evologicsamerica.com": { roles: ["user"] },
-  "ryan@evologicsamerica.com": { roles: ["user"] },
+  "rgray@evologicsamerica.com": { roles: ["user"] },
   "jim@evologicsamerica.com": { roles: ["user"] },
   "sam@evologicsamerica.com": { roles: ["user"] }
 };
@@ -47,13 +47,14 @@ export const handler = async (event, context) => {
   if (event.httpMethod === "GET") {
     const { data, error } = await supabase
       .from("sales_dashboard_state")
-      .select("ledger, updated_at, updated_by_email")
+      .select("version, ledger, updated_at, updated_by_email")
       .eq("id", "global")
       .maybeSingle();
 
     if (error) return json(500, { message: error.message });
     return json(200, {
       ledger: normalizeLedger(data?.ledger),
+      stateVersion: data?.version ?? 1,
       updatedAt: data?.updated_at ?? null,
       updatedByEmail: data?.updated_by_email ?? null
     });
@@ -64,25 +65,27 @@ export const handler = async (event, context) => {
   if (!ledger) {
     return json(400, { message: "Request body must include a valid import ledger." });
   }
+  if (!Number.isInteger(body?.expectedVersion)) {
+    return json(400, { message: "Request body must include the expected shared-ledger version." });
+  }
 
   const { data, error } = await supabase
-    .from("sales_dashboard_state")
-    .upsert(
-      {
-        id: "global",
-        version: 1,
-        ledger,
-        updated_at: new Date().toISOString(),
-        updated_by_email: user.email
-      },
-      { onConflict: "id" }
-    )
-    .select("updated_at, updated_by_email")
-    .single();
+    .rpc("replace_sales_dashboard_ledger", {
+      p_expected_version: body.expectedVersion,
+      p_ledger: ledger,
+      p_updated_by_email: user.email
+    })
+    .maybeSingle();
 
   if (error) return json(500, { message: error.message });
+  if (!data) {
+    return json(409, {
+      message: "Shared sales data changed during this update. Sync the latest data and retry the import."
+    });
+  }
   return json(200, {
-    ledger,
+    ledger: normalizeLedger(data.ledger),
+    stateVersion: data.state_version,
     updatedAt: data.updated_at,
     updatedByEmail: data.updated_by_email
   });

@@ -1,7 +1,8 @@
-import type { ImportLedger } from "../types";
+import type { AutomatedImportJob, ImportLedger } from "../types";
 
 export type SharedLedgerResult = {
   ledger: ImportLedger;
+  stateVersion: number;
   updatedAt?: string | null;
   updatedByEmail?: string | null;
 };
@@ -15,12 +16,22 @@ export async function loadSharedSalesLedger() {
   return requestSharedLedger("/.netlify/functions/sales-ledger");
 }
 
-export async function saveSharedSalesLedger(ledger: ImportLedger) {
+export async function saveSharedSalesLedger(ledger: ImportLedger, expectedVersion: number) {
   return requestSharedLedger("/.netlify/functions/sales-ledger", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ledger })
+    body: JSON.stringify({ ledger, expectedVersion })
   });
+}
+
+export async function loadAutomatedImportHistory() {
+  const response = await fetch("/api/sales-import-history", {
+    credentials: "same-origin",
+    headers: { accept: "application/json" }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || "Automated import history is unavailable.");
+  return (Array.isArray(payload.jobs) ? payload.jobs : []) as AutomatedImportJob[];
 }
 
 async function requestSharedLedger(path: string, init?: RequestInit): Promise<SharedLedgerResult> {

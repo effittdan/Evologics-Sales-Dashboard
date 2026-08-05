@@ -81,6 +81,7 @@ import {
   type NetlifyAuthChallenge
 } from "./lib/netlifyAuth";
 import {
+  loadAutomatedImportHistory,
   loadSharedSalesLedger,
   saveSharedSalesLedger,
   shouldUseSharedLedger
@@ -88,6 +89,7 @@ import {
 import { buildSalesMapPayload } from "./lib/mapData";
 import type {
   AppSession,
+  AutomatedImportJob,
   AppUser,
   AppUserRole,
   ImportLedger,
@@ -132,7 +134,9 @@ export function App() {
   const [authChallenge, setAuthChallenge] = useState<NetlifyAuthChallenge | null>(null);
   const [selectedRepVendor, setSelectedRepVendor] = useState<string | null>(null);
   const [sharedLedgerMessage, setSharedLedgerMessage] = useState("");
+  const [automatedImportJobs, setAutomatedImportJobs] = useState<AutomatedImportJob[]>([]);
   const [sharedLedgerMeta, setSharedLedgerMeta] = useState<{
+    stateVersion: number;
     updatedAt?: string | null;
     updatedByEmail?: string | null;
   } | null>(null);
@@ -231,6 +235,7 @@ export function App() {
         if (!mounted) return;
         setLedger(result.ledger);
         setSharedLedgerMeta({
+          stateVersion: result.stateVersion,
           updatedAt: result.updatedAt,
           updatedByEmail: result.updatedByEmail
         });
@@ -249,6 +254,14 @@ export function App() {
             ? `${error.message} Using this browser's local sales data for now.`
             : "Shared sales storage is not available. Using this browser's local sales data for now."
         );
+      });
+
+    loadAutomatedImportHistory()
+      .then((jobs) => {
+        if (mounted) setAutomatedImportJobs(jobs);
+      })
+      .catch(() => {
+        if (mounted) setAutomatedImportJobs([]);
       });
 
     return () => {
@@ -310,6 +323,7 @@ export function App() {
           batchId,
           importedAt,
           fileFingerprint,
+          importSource: "Manual",
           acceptedTransactionCount: accepted.length,
           skippedDuplicateRows,
           skippedDuplicateFile
@@ -353,8 +367,11 @@ export function App() {
     setSharedLedgerMessage("Refreshing shared sales data...");
     try {
       const result = await loadSharedSalesLedger();
+      const jobs = await loadAutomatedImportHistory().catch(() => automatedImportJobs);
       setLedger(result.ledger);
+      setAutomatedImportJobs(jobs);
       setSharedLedgerMeta({
+        stateVersion: result.stateVersion,
         updatedAt: result.updatedAt,
         updatedByEmail: result.updatedByEmail
       });
@@ -374,10 +391,15 @@ export function App() {
 
   async function saveSharedLedgerIfEnabled(nextLedger: ImportLedger) {
     if (!sharedLedgerEnabled) return;
+    if (!sharedLedgerMeta) {
+      setSharedLedgerMessage("Sync the latest shared sales data before saving an import.");
+      return;
+    }
     setSharedLedgerMessage("Saving shared sales data...");
     try {
-      const result = await saveSharedSalesLedger(nextLedger);
+      const result = await saveSharedSalesLedger(nextLedger, sharedLedgerMeta.stateVersion);
       setSharedLedgerMeta({
+        stateVersion: result.stateVersion,
         updatedAt: result.updatedAt,
         updatedByEmail: result.updatedByEmail
       });
@@ -687,6 +709,7 @@ export function App() {
               <QualityView
                 rows={enriched}
                 quality={quality}
+                automatedImportJobs={automatedImportJobs}
                 sourceRange={importedSourceRange ?? sourceRange}
               />
             )}
@@ -1742,10 +1765,12 @@ function CustomerGeoView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBa
 function QualityView({
   rows,
   quality,
+  automatedImportJobs,
   sourceRange
 }: {
   rows: SalesTransaction[];
   quality: ImportQualitySummary[];
+  automatedImportJobs: AutomatedImportJob[];
   sourceRange?: { start: string; end: string };
 }) {
   const duplicateCount = countDuplicateRows(rows);
@@ -1772,11 +1797,49 @@ function QualityView({
         <Kpi label="Missing state" value={missingStates.toLocaleString()} />
       </div>
       <div className="table-card">
+        <h2>Automated Import History</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Attachment</th>
+              <th>Received</th>
+              <th>Status</th>
+              <th>Parsed</th>
+              <th>Accepted</th>
+              <th>Duplicates</th>
+              <th>Revenue</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {automatedImportJobs.length ? (
+              automatedImportJobs.map((job) => (
+                <tr key={job.id}>
+                  <td>{job.attachmentName}</td>
+                  <td>{formatShortDateTime(job.receivedAt ?? job.createdAt)}</td>
+                  <td>{formatImportJobStatus(job.status)}</td>
+                  <td>{job.parsedRowCount.toLocaleString()}</td>
+                  <td>{job.acceptedTransactionCount.toLocaleString()}</td>
+                  <td>{job.skippedDuplicateRows.toLocaleString()}</td>
+                  <td>{formatCurrency(job.totalRevenue)}</td>
+                  <td>{job.errorMessage || "Clean"}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={8}>No automated mailbox imports have run yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-card">
         <h2>Import Quality</h2>
         <table>
           <thead>
             <tr>
               <th>File</th>
+              <th>Source</th>
               <th>Imported</th>
               <th>Type</th>
               <th>Sheet</th>
@@ -1795,6 +1858,7 @@ function QualityView({
             {quality.map((item) => (
               <tr key={item.batchId}>
                 <td>{item.sourceFile}</td>
+                <td>{item.importSource ?? "Manual"}</td>
                 <td>{formatShortDateTime(item.importedAt)}</td>
                 <td>{item.sourceReportType}</td>
                 <td>{item.sourceSheetName ?? "n/a"}</td>
@@ -1827,6 +1891,17 @@ function QualityView({
       </div>
     </section>
   );
+}
+
+function formatImportJobStatus(status: AutomatedImportJob["status"]) {
+  const labels: Record<AutomatedImportJob["status"], string> = {
+    processing: "Processing",
+    imported: "Imported",
+    duplicate: "Duplicate",
+    review_required: "Review required",
+    failed: "Failed"
+  };
+  return labels[status];
 }
 
 function MappingEditor({
