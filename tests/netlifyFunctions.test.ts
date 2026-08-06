@@ -52,4 +52,19 @@ describe("Netlify functions", () => {
 
     expect(response.statusCode).toBe(200);
   });
+
+  it("accepts Ryan's live Identity email in both signup hooks", async () => {
+    const event = {
+      body: JSON.stringify({ user: { email: "rgray@evologicsamerica.com" } })
+    };
+    const signupResponse = (await identitySignupHandler(event)) as NetlifyResponse;
+    const validationResponse = (await identityValidateHandler(event)) as NetlifyResponse;
+
+    expect(validationResponse.statusCode).toBe(200);
+    expect(JSON.parse(signupResponse.body)).toMatchObject({
+      user_metadata: { full_name: "Ryan Gray" },
+      app_metadata: { roles: ["user"] }
+    });
+    expect(signupResponse.statusCode).toBe(200);
+  });
 });

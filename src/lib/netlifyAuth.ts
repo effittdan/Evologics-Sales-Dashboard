@@ -30,18 +30,22 @@ export function shouldUseNetlifyIdentity() {
 }
 
 export async function initializeNetlifyIdentity() {
-  const callback = await handleAuthCallback();
-  const challenge: NetlifyAuthChallenge | null =
-    callback?.type === "recovery"
-      ? { type: "recovery" }
-      : callback?.type === "invite" && callback.token
-        ? { type: "invite", token: callback.token }
-        : null;
+  try {
+    const callback = await handleAuthCallback();
+    const challenge: NetlifyAuthChallenge | null =
+      callback?.type === "recovery"
+        ? { type: "recovery" }
+        : callback?.type === "invite" && callback.token
+          ? { type: "invite", token: callback.token }
+          : null;
 
-  return {
-    user: normalizeNetlifyUser(await getUser()),
-    challenge
-  };
+    return {
+      user: normalizeNetlifyUser(await getUser()),
+      challenge
+    };
+  } catch (error) {
+    throw new Error(netlifyIdentityErrorMessage(error));
+  }
 }
 
 export async function checkNetlifyIdentitySettings() {
@@ -72,12 +76,15 @@ export async function loginWithNetlifyIdentity(email: string, password: string) 
     if (error instanceof AuthError) {
       return {
         user: null,
-        error: error.status === 401 ? "Invalid Netlify Identity email or password." : error.message
+        error:
+          error.status === 401 && !isEmailNotConfirmedError(error)
+            ? "Invalid Netlify Identity email or password."
+            : netlifyIdentityErrorMessage(error)
       };
     }
     return {
       user: null,
-      error: error instanceof Error ? error.message : "Netlify Identity login failed."
+      error: netlifyIdentityErrorMessage(error, "Netlify Identity login failed.")
     };
   }
 }
@@ -94,13 +101,13 @@ export async function createNetlifyIdentityAccount(email: string, password: stri
         error:
           error.status === 422
             ? "That account could not be created. It may already exist, or the password may not meet Netlify requirements."
-            : error.message
+            : netlifyIdentityErrorMessage(error)
       };
     }
     return {
       user: null,
       needsConfirmation: false,
-      error: error instanceof Error ? error.message : "Netlify Identity account creation failed."
+      error: netlifyIdentityErrorMessage(error, "Netlify Identity account creation failed.")
     };
   }
 }
@@ -122,12 +129,12 @@ export async function completeNetlifyIdentityChallenge(
         error:
           error.status === 422
             ? "That password could not be saved. Use at least 8 characters and try again."
-            : error.message
+            : netlifyIdentityErrorMessage(error)
       };
     }
     return {
       user: null,
-      error: error instanceof Error ? error.message : "Netlify Identity password setup failed."
+      error: netlifyIdentityErrorMessage(error, "Netlify Identity password setup failed.")
     };
   }
 }
@@ -139,4 +146,20 @@ export async function logoutNetlifyIdentity() {
 function normalizeNetlifyUser(user: unknown): NetlifyAuthUser | null {
   if (!user || typeof user !== "object") return null;
   return user as NetlifyAuthUser;
+}
+
+export function netlifyIdentityErrorMessage(
+  error: unknown,
+  fallback = "Netlify Identity could not complete this request."
+) {
+  if (isEmailNotConfirmedError(error)) {
+    return "This new account has not accepted its Netlify invitation yet. Ask an administrator to resend the invitation, then use the Accept invitation link to create a password before using password reset.";
+  }
+  const message = error instanceof Error ? error.message.trim() : "";
+  return message || fallback;
+}
+
+function isEmailNotConfirmedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /email\s+not\s+confirmed/i.test(message);
 }

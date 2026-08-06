@@ -4,7 +4,7 @@ const approvedEmails = new Set([
   "wendy@evologicsamerica.com",
   "eda@evologicsamerica.com",
   "mike@evologicsamerica.com",
-  "ryan@evologicsamerica.com",
+  "rgray@evologicsamerica.com",
   "jim@evologicsamerica.com",
   "sam@evologicsamerica.com"
 ]);

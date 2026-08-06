@@ -4,7 +4,7 @@ const approvedUsers = {
   "wendy@evologicsamerica.com": { name: "Wendy Reyes", roles: ["administrator"] },
   "eda@evologicsamerica.com": { name: "Eda Brown", roles: ["user"] },
   "mike@evologicsamerica.com": { name: "Mike Crescenzo", roles: ["user"] },
-  "ryan@evologicsamerica.com": { name: "Ryan Gray", roles: ["user"] },
+  "rgray@evologicsamerica.com": { name: "Ryan Gray", roles: ["user"] },
   "jim@evologicsamerica.com": { name: "Jim Courville", roles: ["user"] },
   "sam@evologicsamerica.com": { name: "Sam Williamson", roles: ["user"] }
 };

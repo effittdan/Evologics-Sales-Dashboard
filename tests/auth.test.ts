@@ -7,7 +7,7 @@ import {
   initializeUsers,
   seedUsers
 } from "../src/lib/auth";
-import { shouldUseNetlifyIdentity } from "../src/lib/netlifyAuth";
+import { netlifyIdentityErrorMessage, shouldUseNetlifyIdentity } from "../src/lib/netlifyAuth";
 
 describe("local auth", () => {
   it("seeds the requested Evologics users without plaintext passwords", () => {
@@ -95,5 +95,11 @@ describe("local auth", () => {
 
   it("uses local fallback auth only on localhost", () => {
     expect(shouldUseNetlifyIdentity()).toBe(false);
+  });
+
+  it("explains that unconfirmed new users must accept their invitation before password reset", () => {
+    expect(netlifyIdentityErrorMessage(new Error("invalid_grant: Email not confirmed"))).toBe(
+      "This new account has not accepted its Netlify invitation yet. Ask an administrator to resend the invitation, then use the Accept invitation link to create a password before using password reset."
+    );
   });
 });
