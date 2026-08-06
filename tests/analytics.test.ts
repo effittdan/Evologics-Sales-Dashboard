@@ -3,7 +3,9 @@ import {
   applyFilters,
   createEmptyImportLedger,
   emptyFilters,
+  entityMomentum,
   partitionNewTransactions,
+  rankMomentumRows,
   salesTransactionKey,
   timeSeries
 } from "../src/lib/analytics";
@@ -53,6 +55,43 @@ describe("weekly reporting", () => {
       { period: "2026-06-29", revenue: 100 },
       { period: "2026-07-06", revenue: 650 }
     ]);
+  });
+
+  it("compares the latest four completed weeks with the prior four weeks", () => {
+    const rows = [
+      makeTransaction({ customerName: "Growing Hospital", transactionDate: "2026-06-15", revenue: 100 }),
+      makeTransaction({ customerName: "Growing Hospital", transactionDate: "2026-07-20", revenue: 500 }),
+      makeTransaction({ customerName: "Declining Hospital", transactionDate: "2026-06-22", revenue: 900 }),
+      makeTransaction({ customerName: "Declining Hospital", transactionDate: "2026-07-27", revenue: 100 }),
+      makeTransaction({ customerName: "Partial Week", transactionDate: "2026-08-05", revenue: 9999 })
+    ];
+
+    const analysis = entityMomentum(rows, "hospital");
+
+    expect(analysis?.currentRange).toEqual({ start: "2026-07-06", end: "2026-08-02" });
+    expect(analysis?.previousRange).toEqual({ start: "2026-06-08", end: "2026-07-05" });
+    expect(analysis?.rows.find((row) => row.name === "Partial Week")).toBeUndefined();
+    expect(rankMomentumRows(analysis?.rows ?? [], "change", "top", 1)[0].name).toBe("Growing Hospital");
+    expect(rankMomentumRows(analysis?.rows ?? [], "change", "bottom", 1)[0].name).toBe("Declining Hospital");
+  });
+
+  it("separates distributor customers from hospitals using sales category", () => {
+    const distributor = makeTransaction({
+      customerName: "Regional Distributor",
+      salesCategory: "Distributor",
+      transactionDate: "2026-07-20"
+    });
+    const hospital = makeTransaction({
+      customerName: "Regional Hospital",
+      salesCategory: "Direct Retail",
+      transactionDate: "2026-07-20"
+    });
+    const anchor = makeTransaction({ transactionDate: "2026-08-05", revenue: 0 });
+
+    expect(entityMomentum([distributor, hospital, anchor], "distributor")?.rows.map((row) => row.name))
+      .toEqual(["Regional Distributor"]);
+    expect(entityMomentum([distributor, hospital, anchor], "hospital")?.rows.map((row) => row.name).sort())
+      .toEqual(["Regional Hospital"]);
   });
 });
 

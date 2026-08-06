@@ -503,6 +503,51 @@ select[multiple] {
   background: var(--primary);
 }
 
+.momentum-header {
+  align-items: flex-end;
+}
+
+.momentum-header .subtle {
+  margin: 7px 0 0;
+}
+
+.momentum-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.momentum-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.momentum-tables {
+  display: grid;
+  gap: 18px;
+}
+
+.momentum-table table {
+  min-width: 880px;
+}
+
+.momentum-table th:first-child,
+.momentum-table td:first-child {
+  width: 54px;
+  color: var(--muted);
+}
+
+.momentum-name {
+  min-width: 190px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.momentum-sparkline {
+  width: 156px;
+  height: 42px;
+}
+
 .table-card {
   overflow-x: auto;
   overflow-y: hidden;
@@ -787,6 +832,10 @@ select[multiple] {
   .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .momentum-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 860px) {
@@ -810,6 +859,20 @@ select[multiple] {
   .topbar,
   .section-header {
     display: grid;
+  }
+
+  .momentum-controls {
+    justify-content: flex-start;
+  }
+
+  .momentum-controls .segmented {
+    width: 100%;
+  }
+
+  .momentum-controls .segmented button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 8px;
   }
 
   .filter-grid,

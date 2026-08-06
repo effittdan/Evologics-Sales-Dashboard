@@ -12,6 +12,7 @@ import {
   Printer,
   RefreshCcw,
   SlidersHorizontal,
+  TrendingUp,
   UserPlus,
   UsersRound
 } from "lucide-react";
@@ -38,6 +39,7 @@ import {
   customerPerformance,
   dateRange,
   emptyFilters,
+  entityMomentum,
   formatCurrency,
   formatNumber,
   formatPercent,
@@ -45,6 +47,7 @@ import {
   optionValues,
   partitionNewTransactions,
   productPerformance,
+  rankMomentumRows,
   repPerformance,
   resolveDateRange,
   salesDate,
@@ -53,6 +56,9 @@ import {
   topByRevenue,
   type DashboardFilters,
   type DateBasis,
+  type MomentumEntity,
+  type MomentumMetric,
+  type MomentumRow,
   type TimeSeriesGrain
 } from "./lib/analytics";
 import {
@@ -569,6 +575,9 @@ export function App() {
           <NavButton icon={<Database />} id="customers" active={activeView} onClick={setActiveView}>
             Customers & States
           </NavButton>
+          <NavButton icon={<TrendingUp />} id="momentum" active={activeView} onClick={setActiveView}>
+            Growth & Risk
+          </NavButton>
           <NavButton icon={<MapPinned />} id="map" active={activeView} onClick={setActiveView}>
             National Sales Map
           </NavButton>
@@ -697,6 +706,9 @@ export function App() {
             )}
             {activeView === "customers" && (
               <CustomerGeoView rows={filtered} dateBasis={filters.dateBasis} />
+            )}
+            {activeView === "momentum" && (
+              <GrowthRiskView rows={filtered} dateBasis={filters.dateBasis} />
             )}
             {activeView === "map" && (
               <NationalSalesMap
@@ -1762,6 +1774,139 @@ function CustomerGeoView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBa
   );
 }
 
+function GrowthRiskView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBasis: DateBasis }) {
+  const [entity, setEntity] = useState<MomentumEntity>("distributor");
+  const [metric, setMetric] = useState<MomentumMetric>("change");
+  const analysis = useMemo(() => entityMomentum(rows, entity, dateBasis), [rows, entity, dateBasis]);
+  const topRows = rankMomentumRows(analysis?.rows ?? [], metric, "top");
+  const bottomRows = rankMomentumRows(analysis?.rows ?? [], metric, "bottom");
+  const currentRevenue = analysis?.rows.reduce((total, row) => total + row.currentRevenue, 0) ?? 0;
+  const previousRevenue = analysis?.rows.reduce((total, row) => total + row.previousRevenue, 0) ?? 0;
+  const growingCount = analysis?.rows.filter((row) => row.changeRevenue > 0).length ?? 0;
+  const decliningCount = analysis?.rows.filter((row) => row.changeRevenue < 0).length ?? 0;
+  const entityLabel = entity === "distributor" ? "Distributors" : entity === "state" ? "States" : "Hospitals";
+
+  return (
+    <section className="view-stack">
+      <div className="section-header momentum-header">
+        <div>
+          <p className="eyebrow">Completed-week comparison</p>
+          <h2>Growth & Risk</h2>
+          {analysis ? (
+            <p className="subtle">
+              Current {analysis.currentRange.start} to {analysis.currentRange.end} compared with {analysis.previousRange.start} to {analysis.previousRange.end}
+            </p>
+          ) : null}
+        </div>
+        <div className="momentum-controls">
+          <div className="segmented" aria-label="Entity type">
+            {(["distributor", "state", "hospital"] as const).map((item) => (
+              <button key={item} className={entity === item ? "active" : ""} onClick={() => setEntity(item)}>
+                {item === "hospital" ? "Hospitals" : `${item[0].toUpperCase()}${item.slice(1)}s`}
+              </button>
+            ))}
+          </div>
+          <div className="segmented" aria-label="Ranking metric">
+            {(["change", "revenue"] as const).map((item) => (
+              <button key={item} className={metric === item ? "active" : ""} onClick={() => setMetric(item)}>
+                {item === "change" ? "Growth / loss" : "Sales"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {!analysis || !analysis.rows.length ? (
+        <SoftEmpty text={`No ${entityLabel.toLowerCase()} have sales in the latest eight completed weeks under the current filters.`} />
+      ) : (
+        <>
+          <div className="kpi-grid compact momentum-kpis">
+            <Kpi label="Current 4-week sales" value={formatCurrency(currentRevenue)} />
+            <Kpi label="Prior 4-week sales" value={formatCurrency(previousRevenue)} />
+            <Kpi label="Growing" value={growingCount.toLocaleString()} />
+            <Kpi label="Declining" value={decliningCount.toLocaleString()} />
+          </div>
+          <div className="momentum-tables">
+            <MomentumTable
+              title={metric === "change" ? `Top 20 Growing ${entityLabel}` : `Top 20 ${entityLabel} by Sales`}
+              rows={topRows}
+              tone="positive"
+            />
+            <MomentumTable
+              title={metric === "change" ? `Bottom 20 Declining ${entityLabel}` : `Bottom 20 ${entityLabel} by Sales`}
+              rows={bottomRows}
+              tone="negative"
+            />
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function MomentumTable({
+  title,
+  rows,
+  tone
+}: {
+  title: string;
+  rows: MomentumRow[];
+  tone: "positive" | "negative";
+}) {
+  return (
+    <div className="table-card momentum-table">
+      <h2>{title}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Name</th>
+            <th>8-week trend</th>
+            <th>Current</th>
+            <th>Prior</th>
+            <th>Change</th>
+            <th>Change %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={row.name}>
+              <td>{index + 1}</td>
+              <td className="momentum-name">{row.name}</td>
+              <td><MomentumSparkline row={row} tone={tone} /></td>
+              <td>{formatCurrency(row.currentRevenue)}</td>
+              <td>{formatCurrency(row.previousRevenue)}</td>
+              <td className={row.changeRevenue < 0 ? "negative" : "positive"}>
+                {formatSignedCurrency(row.changeRevenue)}
+              </td>
+              <td className={row.changeRevenue < 0 ? "negative" : "positive"}>
+                {row.previousRevenue === 0 && row.currentRevenue !== 0 ? "New" : formatPercent(row.changePct)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MomentumSparkline({ row, tone }: { row: MomentumRow; tone: "positive" | "negative" }) {
+  const stroke = row.changeRevenue < 0 ? "#A63F3F" : tone === "positive" ? "#1F4F45" : "#8A6B1F";
+  return (
+    <div className="momentum-sparkline" aria-label={`${row.name} eight-week sales trend`}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={row.trend} margin={{ top: 4, right: 2, bottom: 4, left: 2 }}>
+          <Tooltip
+            labelFormatter={(value) => `Week of ${value}`}
+            formatter={(value) => [formatCurrency(Number(value)), "Sales"]}
+          />
+          <Line type="monotone" dataKey="revenue" stroke={stroke} strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function QualityView({
   rows,
   quality,
@@ -2185,6 +2330,11 @@ function formatShortDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatSignedCurrency(value: number) {
+  if (value === 0) return formatCurrency(0);
+  return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
 }
 
 function combineQualityRanges(quality: ImportQualitySummary[]) {

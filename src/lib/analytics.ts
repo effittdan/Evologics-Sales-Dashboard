@@ -210,6 +210,23 @@ export function kpis(rows: SalesTransaction[]) {
 }
 
 export type TimeSeriesGrain = "day" | "week" | "month" | "quarter" | "year";
+export type MomentumEntity = "distributor" | "state" | "hospital";
+export type MomentumMetric = "change" | "revenue";
+
+export type MomentumRow = {
+  name: string;
+  currentRevenue: number;
+  previousRevenue: number;
+  changeRevenue: number;
+  changePct: number | null;
+  trend: { period: string; revenue: number }[];
+};
+
+export type MomentumAnalysis = {
+  currentRange: { start: string; end: string };
+  previousRange: { start: string; end: string };
+  rows: MomentumRow[];
+};
 
 export function timeSeries(
   rows: SalesTransaction[],
@@ -229,6 +246,78 @@ export function timeSeries(
       ...row,
       changePct: index > 0 && all[index - 1].revenue ? row.revenue / all[index - 1].revenue - 1 : null
     }));
+}
+
+export function entityMomentum(
+  rows: SalesTransaction[],
+  entity: MomentumEntity,
+  dateBasis: DateBasis = "transaction"
+): MomentumAnalysis | undefined {
+  const range = dateRange(rows, dateBasis);
+  if (!range) return undefined;
+
+  const latestDate = parseDate(range.end);
+  const completedWeekEnd = latestDate.getUTCDay() === 0
+    ? latestDate
+    : addDays(startOfWeek(latestDate), -1);
+  const currentStart = addDays(completedWeekEnd, -27);
+  const previousEnd = addDays(currentStart, -1);
+  const previousStart = addDays(previousEnd, -27);
+  const weekStarts = Array.from({ length: 8 }, (_, index) => addDays(previousStart, index * 7));
+  const grouped = new Map<string, SalesTransaction[]>();
+
+  rows.forEach((row) => {
+    const date = parseDate(salesDate(row, dateBasis));
+    if (date < previousStart || date > completedWeekEnd) return;
+    const name = momentumEntityName(row, entity);
+    if (!name) return;
+    grouped.set(name, [...(grouped.get(name) ?? []), row]);
+  });
+
+  const analysisRows = [...grouped.entries()].map(([name, entityRows]) => {
+    const currentRows = entityRows.filter((row) => parseDate(salesDate(row, dateBasis)) >= currentStart);
+    const previousRows = entityRows.filter((row) => parseDate(salesDate(row, dateBasis)) <= previousEnd);
+    const currentRevenue = sum(currentRows, "revenue");
+    const previousRevenue = sum(previousRows, "revenue");
+    return {
+      name,
+      currentRevenue,
+      previousRevenue,
+      changeRevenue: currentRevenue - previousRevenue,
+      changePct: previousRevenue ? currentRevenue / previousRevenue - 1 : null,
+      trend: weekStarts.map((weekStart) => {
+        const weekEnd = addDays(weekStart, 6);
+        return {
+          period: isoDate(weekStart),
+          revenue: sum(
+            entityRows.filter((row) => {
+              const date = parseDate(salesDate(row, dateBasis));
+              return date >= weekStart && date <= weekEnd;
+            }),
+            "revenue"
+          )
+        };
+      })
+    };
+  });
+
+  return {
+    currentRange: { start: isoDate(currentStart), end: isoDate(completedWeekEnd) },
+    previousRange: { start: isoDate(previousStart), end: isoDate(previousEnd) },
+    rows: analysisRows
+  };
+}
+
+export function rankMomentumRows(
+  rows: MomentumRow[],
+  metric: MomentumMetric,
+  direction: "top" | "bottom",
+  limit = 20
+) {
+  const value = (row: MomentumRow) => metric === "change" ? row.changeRevenue : row.currentRevenue;
+  return [...rows]
+    .sort((a, b) => direction === "top" ? value(b) - value(a) : value(a) - value(b))
+    .slice(0, limit);
 }
 
 export function topByRevenue(
@@ -400,4 +489,18 @@ function startOfWeek(date: Date) {
   const day = date.getUTCDay();
   const mondayOffset = day === 0 ? -6 : 1 - day;
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + mondayOffset));
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+}
+
+function momentumEntityName(row: SalesTransaction, entity: MomentumEntity) {
+  if (entity === "state") return row.shippingState?.trim() || undefined;
+  const category = row.salesCategory?.replace(/\s+/g, "").toLowerCase();
+  if (entity === "distributor") {
+    return category === "distributor" ? row.customerName.trim() : undefined;
+  }
+  if (category === "distributor" || category === "wholesale") return undefined;
+  return row.customerName.trim() || undefined;
 }
