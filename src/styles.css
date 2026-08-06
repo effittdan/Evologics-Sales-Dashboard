@@ -548,6 +548,18 @@ select[multiple] {
   height: 42px;
 }
 
+.distributor-account-report .report-toolbar {
+  justify-content: space-between;
+}
+
+.distributor-sales-table table {
+  min-width: 900px;
+}
+
+.distributor-sales-table td:nth-child(5) {
+  min-width: 240px;
+}
+
 .table-card {
   overflow-x: auto;
   overflow-y: hidden;

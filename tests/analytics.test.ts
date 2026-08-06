@@ -7,7 +7,8 @@ import {
   partitionNewTransactions,
   rankMomentumRows,
   salesTransactionKey,
-  timeSeries
+  timeSeries,
+  withoutShippingStateFilter
 } from "../src/lib/analytics";
 import type { SalesTransaction } from "../src/types";
 
@@ -106,6 +107,20 @@ describe("dashboard filters", () => {
         salesCategory: ["Wholesale"]
       })
     ).toEqual([wholesale]);
+  });
+
+  it("can remove only the shipping-state filter for cross-state account reports", () => {
+    const filters = {
+      ...emptyFilters,
+      shippingState: ["TX"],
+      sku: ["EAP-48"]
+    };
+
+    expect(withoutShippingStateFilter(filters)).toMatchObject({
+      shippingState: [],
+      sku: ["EAP-48"]
+    });
+    expect(filters.shippingState).toEqual(["TX"]);
   });
 
   it("can report backdated transactions by their created date", () => {

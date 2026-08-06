@@ -54,6 +54,7 @@ import {
   salesTransactionKey,
   timeSeries,
   topByRevenue,
+  withoutShippingStateFilter,
   type DashboardFilters,
   type DateBasis,
   type MomentumEntity,
@@ -280,6 +281,10 @@ export function App() {
     [transactions, repMappings, skuEnrichments]
   );
   const filtered = useMemo(() => applyFilters(enriched, filters), [enriched, filters]);
+  const filteredWithoutState = useMemo(
+    () => applyFilters(enriched, withoutShippingStateFilter(filters)),
+    [enriched, filters]
+  );
   const metrics = useMemo(() => kpis(filtered), [filtered]);
   const sourceRange = dateRange(enriched);
   const importedSourceRange = useMemo(() => combineQualityRanges(quality), [quality]);
@@ -708,7 +713,11 @@ export function App() {
               <CustomerGeoView rows={filtered} dateBasis={filters.dateBasis} />
             )}
             {activeView === "momentum" && (
-              <GrowthRiskView rows={filtered} dateBasis={filters.dateBasis} />
+              <GrowthRiskView
+                rows={filtered}
+                distributorDetailRows={filteredWithoutState}
+                dateBasis={filters.dateBasis}
+              />
             )}
             {activeView === "map" && (
               <NationalSalesMap
@@ -1774,9 +1783,18 @@ function CustomerGeoView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBa
   );
 }
 
-function GrowthRiskView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBasis: DateBasis }) {
+function GrowthRiskView({
+  rows,
+  distributorDetailRows,
+  dateBasis
+}: {
+  rows: SalesTransaction[];
+  distributorDetailRows: SalesTransaction[];
+  dateBasis: DateBasis;
+}) {
   const [entity, setEntity] = useState<MomentumEntity>("distributor");
   const [metric, setMetric] = useState<MomentumMetric>("change");
+  const [selectedDistributor, setSelectedDistributor] = useState<string | null>(null);
   const analysis = useMemo(() => entityMomentum(rows, entity, dateBasis), [rows, entity, dateBasis]);
   const topRows = rankMomentumRows(analysis?.rows ?? [], metric, "top");
   const bottomRows = rankMomentumRows(analysis?.rows ?? [], metric, "bottom");
@@ -1785,6 +1803,22 @@ function GrowthRiskView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBas
   const growingCount = analysis?.rows.filter((row) => row.changeRevenue > 0).length ?? 0;
   const decliningCount = analysis?.rows.filter((row) => row.changeRevenue < 0).length ?? 0;
   const entityLabel = entity === "distributor" ? "Distributors" : entity === "state" ? "States" : "Hospitals";
+  const selectedRows = selectedDistributor
+    ? distributorDetailRows.filter(
+        (row) => isDistributorCategory(row.salesCategory) && row.customerName === selectedDistributor
+      )
+    : [];
+
+  if (selectedDistributor) {
+    return (
+      <DistributorAccountReport
+        distributorName={selectedDistributor}
+        rows={selectedRows}
+        dateBasis={dateBasis}
+        onBack={() => setSelectedDistributor(null)}
+      />
+    );
+  }
 
   return (
     <section className="view-stack">
@@ -1801,7 +1835,14 @@ function GrowthRiskView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBas
         <div className="momentum-controls">
           <div className="segmented" aria-label="Entity type">
             {(["distributor", "state", "hospital"] as const).map((item) => (
-              <button key={item} className={entity === item ? "active" : ""} onClick={() => setEntity(item)}>
+              <button
+                key={item}
+                className={entity === item ? "active" : ""}
+                onClick={() => {
+                  setEntity(item);
+                  setSelectedDistributor(null);
+                }}
+              >
                 {item === "hospital" ? "Hospitals" : `${item[0].toUpperCase()}${item.slice(1)}s`}
               </button>
             ))}
@@ -1831,11 +1872,13 @@ function GrowthRiskView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBas
               title={metric === "change" ? `Top 20 Growing ${entityLabel}` : `Top 20 ${entityLabel} by Sales`}
               rows={topRows}
               tone="positive"
+              onSelectName={entity === "distributor" ? setSelectedDistributor : undefined}
             />
             <MomentumTable
               title={metric === "change" ? `Bottom 20 Declining ${entityLabel}` : `Bottom 20 ${entityLabel} by Sales`}
               rows={bottomRows}
               tone="negative"
+              onSelectName={entity === "distributor" ? setSelectedDistributor : undefined}
             />
           </div>
         </>
@@ -1847,11 +1890,13 @@ function GrowthRiskView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBas
 function MomentumTable({
   title,
   rows,
-  tone
+  tone,
+  onSelectName
 }: {
   title: string;
   rows: MomentumRow[];
   tone: "positive" | "negative";
+  onSelectName?: (name: string) => void;
 }) {
   return (
     <div className="table-card momentum-table">
@@ -1872,7 +1917,13 @@ function MomentumTable({
           {rows.map((row, index) => (
             <tr key={row.name}>
               <td>{index + 1}</td>
-              <td className="momentum-name">{row.name}</td>
+              <td className="momentum-name">
+                {onSelectName ? (
+                  <button className="text-action" onClick={() => onSelectName(row.name)}>
+                    {row.name}
+                  </button>
+                ) : row.name}
+              </td>
               <td><MomentumSparkline row={row} tone={tone} /></td>
               <td>{formatCurrency(row.currentRevenue)}</td>
               <td>{formatCurrency(row.previousRevenue)}</td>
@@ -1888,6 +1939,136 @@ function MomentumTable({
       </table>
     </div>
   );
+}
+
+function DistributorAccountReport({
+  distributorName,
+  rows,
+  dateBasis,
+  onBack
+}: {
+  distributorName: string;
+  rows: SalesTransaction[];
+  dateBasis: DateBasis;
+  onBack: () => void;
+}) {
+  const metrics = kpis(rows);
+  const range = dateRange(rows, dateBasis);
+  const weekly = timeSeries(rows, "week", dateBasis);
+  const states = topByRevenue(rows, "shippingState", 20);
+  const products = productPerformance(rows).slice(0, 15);
+  const transactions = [...rows].sort((a, b) => salesDate(b, dateBasis).localeCompare(salesDate(a, dateBasis)));
+
+  return (
+    <article className="rep-report distributor-account-report">
+      <div className="report-toolbar no-print">
+        <button className="ghost-button" onClick={onBack}>
+          <ArrowLeft size={18} />
+          Back to rankings
+        </button>
+        <button className="upload-button" onClick={() => window.print()}>
+          <Printer size={18} />
+          Save PDF
+        </button>
+      </div>
+      <div className="report-page">
+        <div className="report-header">
+          <div>
+            <p className="eyebrow">Distributor account | all shipping states</p>
+            <h2>{distributorName}</h2>
+            <p className="subtle">
+              {range ? `${range.start} to ${range.end} | ` : ""}State filter ignored; all other dashboard filters retained
+            </p>
+          </div>
+          <img src="/evologics-logo-wide.png" alt="Evologics" />
+        </div>
+
+        {!rows.length ? (
+          <SoftEmpty text="No distributor sales match the active date and product filters." />
+        ) : (
+          <>
+            <div className="kpi-grid compact distributor-account-kpis">
+              <Kpi label="Total sales" value={formatCurrency(metrics.revenue)} />
+              <Kpi label="Shipping states" value={optionValues(rows, "shippingState").length.toLocaleString()} />
+              <Kpi label="Products" value={metrics.uniqueSkus.toLocaleString()} />
+              <Kpi label="Quantity" value={formatNumber(metrics.quantity)} />
+              <Kpi label="Sales lines" value={metrics.transactionCount.toLocaleString()} />
+              <Kpi label="Avg revenue / line" value={formatCurrency(metrics.averageRevenuePerLine)} />
+            </div>
+
+            <div className="dashboard-grid report-grid">
+              <ChartCard title="Weekly Sales Trend">
+                <RevenueArea data={weekly} />
+              </ChartCard>
+              <ChartCard title="Sales by Shipping State">
+                <RevenueBar data={states} nameKey="name" />
+              </ChartCard>
+            </div>
+
+            <div className="table-card">
+              <h2>Top Products</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Description</th>
+                    <th>Sales</th>
+                    <th>Quantity</th>
+                    <th>Line items</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map((product) => (
+                    <tr key={product.sku}>
+                      <td>{product.sku}</td>
+                      <td>{product.description}</td>
+                      <td>{formatCurrency(product.revenue)}</td>
+                      <td>{formatNumber(product.quantity)}</td>
+                      <td>{product.transactions.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-card distributor-sales-table">
+              <h2>All Sales</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Document</th>
+                    <th>State</th>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((transaction) => (
+                    <tr key={`${salesTransactionKey(transaction)}-${transaction.sourceRowNumber}`}>
+                      <td>{salesDate(transaction, dateBasis)}</td>
+                      <td>{transaction.documentNumber || "n/a"}</td>
+                      <td>{transaction.shippingState || "Unassigned"}</td>
+                      <td>{transaction.sku}</td>
+                      <td>{transaction.productDescription}</td>
+                      <td>{formatNumber(transaction.quantity)}</td>
+                      <td>{formatCurrency(transaction.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function isDistributorCategory(category?: string) {
+  return category?.replace(/\s+/g, "").toLowerCase() === "distributor";
 }
 
 function MomentumSparkline({ row, tone }: { row: MomentumRow; tone: "positive" | "negative" }) {

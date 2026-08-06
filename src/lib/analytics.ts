@@ -163,6 +163,10 @@ export function applyFilters(rows: SalesTransaction[], filters: DashboardFilters
   });
 }
 
+export function withoutShippingStateFilter(filters: DashboardFilters): DashboardFilters {
+  return { ...filters, shippingState: [] };
+}
+
 export function resolveDateRange(rows: SalesTransaction[], filters: DashboardFilters) {
   const range = dateRange(rows, filters.dateBasis);
   if (!range) return {};
