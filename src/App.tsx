@@ -44,9 +44,11 @@ import {
   formatNumber,
   formatPercent,
   kpis,
+  managerOptions,
   optionValues,
   partitionNewTransactions,
   productPerformance,
+  productFamilyOptions,
   rankMomentumRows,
   repPerformance,
   resolveDateRange,
@@ -1122,6 +1124,10 @@ function FilterPanel({
 }) {
   const set = <K extends keyof DashboardFilters>(key: K, value: DashboardFilters[K]) =>
     setFilters({ ...filters, [key]: value });
+  const displayedRange =
+    selectedRange.start || selectedRange.end
+      ? selectedRange
+      : dateRange(rows, filters.dateBasis) ?? {};
 
   return (
     <section className="filter-panel">
@@ -1132,7 +1138,8 @@ function FilterPanel({
           Clear all
         </button>
       </div>
-      <div className="filter-grid">
+      <div className="filter-rows">
+      <div className="filter-row filter-row-dates">
         <div className="filter-field">
           <span>Date basis</span>
           <div className="segmented date-basis-control">
@@ -1159,32 +1166,38 @@ function FilterPanel({
             <option value="custom">Custom</option>
           </select>
         </label>
-        {filters.datePreset === "custom" ? (
-          <>
-            <label>
-              Start
-              <input
-                type="date"
-                value={filters.customStart ?? ""}
-                onChange={(event) => set("customStart", event.target.value)}
-              />
-            </label>
-            <label>
-              End
-              <input
-                type="date"
-                value={filters.customEnd ?? ""}
-                onChange={(event) => set("customEnd", event.target.value)}
-              />
-            </label>
-          </>
-        ) : (
-          <div className="range-readout">
-            {selectedRange.start && selectedRange.end
-              ? `${selectedRange.start} to ${selectedRange.end}`
-              : "Using full imported range"}
-          </div>
-        )}
+        <label>
+          Start
+          <input
+            type="date"
+            value={filters.datePreset === "custom" ? filters.customStart ?? "" : displayedRange.start ?? ""}
+            onChange={(event) =>
+              setFilters({
+                ...filters,
+                datePreset: "custom",
+                customStart: event.target.value,
+                customEnd: filters.customEnd ?? displayedRange.end
+              })
+            }
+          />
+        </label>
+        <label>
+          End
+          <input
+            type="date"
+            value={filters.datePreset === "custom" ? filters.customEnd ?? "" : displayedRange.end ?? ""}
+            onChange={(event) =>
+              setFilters({
+                ...filters,
+                datePreset: "custom",
+                customStart: filters.customStart ?? displayedRange.start,
+                customEnd: event.target.value
+              })
+            }
+          />
+        </label>
+      </div>
+      <div className="filter-row">
         <MultiSelect
           label="Sales rep / vendor"
           values={filters.salesRepVendor}
@@ -1197,12 +1210,14 @@ function FilterPanel({
           options={optionValues(rows, "salesGroup")}
           onChange={(values) => set("salesGroup", values)}
         />
-        <MultiSelect
-          label="Entity type"
-          values={filters.salesEntityType}
-          options={["Salesperson", "Distributor", "Vendor", "Unknown"]}
-          onChange={(values) => set("salesEntityType", values)}
+        <QuickFilterLinks
+          label="Managers"
+          values={filters.managers}
+          options={[...managerOptions]}
+          onChange={(values) => set("managers", values)}
         />
+      </div>
+      <div className="filter-row">
         <MultiSelect
           label="Category"
           values={filters.salesCategory}
@@ -1212,15 +1227,17 @@ function FilterPanel({
         <MultiSelect
           label="Product class"
           values={filters.productClass}
-          options={optionValues(rows, "productClass")}
+          options={productFamilyOptions(rows)}
           onChange={(values) => set("productClass", values)}
         />
         <MultiSelect
           label="SKU"
           values={filters.sku}
-          options={optionValues(rows, "sku")}
+          options={skuFilterOptions(rows)}
           onChange={(values) => set("sku", values)}
         />
+      </div>
+      <div className="filter-row">
         <MultiSelect
           label="Customer"
           values={filters.customerName}
@@ -1239,6 +1256,7 @@ function FilterPanel({
           options={optionValues(rows, "transactionType")}
           onChange={(values) => set("transactionType", values)}
         />
+      </div>
       </div>
     </section>
   );
@@ -2427,7 +2445,7 @@ function MultiSelect({
 }: {
   label: string;
   values: string[];
-  options: string[];
+  options: Array<string | { value: string; label: string }>;
   onChange: (values: string[]) => void;
 }) {
   return (
@@ -2440,14 +2458,61 @@ function MultiSelect({
           onChange(Array.from(event.currentTarget.selectedOptions).map((option) => option.value))
         }
       >
-        {options.slice(0, 300).map((option) => (
-          <option key={option} value={option}>
-            {option}
+        {options.slice(0, 300).map((option) => {
+          const value = typeof option === "string" ? option : option.value;
+          const optionLabel = typeof option === "string" ? option : option.label;
+          return <option key={value} value={value}>
+            {optionLabel}
           </option>
-        ))}
+        })}
       </select>
     </label>
   );
+}
+
+function QuickFilterLinks({
+  label,
+  values,
+  options,
+  onChange
+}: {
+  label: string;
+  values: string[];
+  options: string[];
+  onChange: (values: string[]) => void;
+}) {
+  return (
+    <div className="filter-field">
+      <span>{label}</span>
+      <div className="manager-links">
+        {options.map((option) => {
+          const selected = values.includes(option);
+          return (
+            <button
+              key={option}
+              className={selected ? "selected" : ""}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onChange(selected ? values.filter((value) => value !== option) : [...values, option])}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function skuFilterOptions(rows: SalesTransaction[]) {
+  const descriptions = new Map<string, string>();
+  rows.forEach((row) => {
+    if (row.sku && !descriptions.has(row.sku)) descriptions.set(row.sku, row.productDescription.trim());
+  });
+  return Array.from(descriptions, ([value, description]) => ({
+    value,
+    label: description ? `${description} — ${value}` : value
+  })).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function NavButton({

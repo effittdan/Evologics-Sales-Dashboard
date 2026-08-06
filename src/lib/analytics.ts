@@ -17,7 +17,7 @@ export type DashboardFilters = {
   customEnd?: string;
   salesRepVendor: string[];
   salesGroup: string[];
-  salesEntityType: string[];
+  managers: string[];
   salesCategory: string[];
   productClass: string[];
   sku: string[];
@@ -31,7 +31,7 @@ export const emptyFilters: DashboardFilters = {
   dateBasis: "transaction",
   salesRepVendor: [],
   salesGroup: [],
-  salesEntityType: [],
+  managers: [],
   salesCategory: [],
   productClass: [],
   sku: [],
@@ -152,15 +152,64 @@ export function applyFilters(rows: SalesTransaction[], filters: DashboardFilters
     if (range.end && rowDate > range.end) return false;
     if (!matches(row.salesRepVendor, filters.salesRepVendor)) return false;
     if (!matches(row.salesGroup, filters.salesGroup)) return false;
-    if (!matches(row.salesEntityType, filters.salesEntityType)) return false;
+    if (!matchesManager(row.salesRepVendor, filters.managers)) return false;
     if (!matches(row.salesCategory, filters.salesCategory)) return false;
-    if (!matches(row.productClass, filters.productClass)) return false;
+    if (!matches(productFamily(row), filters.productClass)) return false;
     if (!matches(row.sku, filters.sku)) return false;
     if (!matches(row.customerName, filters.customerName)) return false;
     if (!matches(row.shippingState, filters.shippingState)) return false;
     if (!matches(row.transactionType, filters.transactionType)) return false;
     return true;
   });
+}
+
+export const managerOptions = [
+  "Jim Courville",
+  "Ryan Gray",
+  "Sam Williamson",
+  "Garret Hebert",
+  "Ben Dupont"
+] as const;
+
+const managerAliases: Record<(typeof managerOptions)[number], string[]> = {
+  "Jim Courville": ["Jim Courville"],
+  "Ryan Gray": ["Ryan Gray"],
+  "Sam Williamson": ["Sam Williamson", "Samuel Williamson"],
+  "Garret Hebert": ["Garret Hebert", "Garrett Hebert"],
+  "Ben Dupont": ["Ben Dupont", "Benjamin Dupont"]
+};
+
+function matchesManager(value: string | undefined, selected: string[]) {
+  if (!selected.length) return true;
+  if (!value) return false;
+  const normalizedValue = value.trim().toLowerCase();
+  return selected.some((manager) =>
+    (managerAliases[manager as keyof typeof managerAliases] ?? [manager]).some(
+      (alias) => alias.toLowerCase() === normalizedValue
+    )
+  );
+}
+
+export function productFamily(row: SalesTransaction) {
+  const source = `${row.productClass ?? ""} ${row.productDescription} ${row.sku}`.toLowerCase();
+  if (source.includes("evo patch") || source.includes("evopatch")) return "EvoPatch";
+  if (source.includes("a-matrx") || source.includes("amatrx") || source.includes("evoflakes")) return "A-MATRX";
+  if (source.includes("demineralized bone matrix") || /\bdbm\b/.test(source)) return "DBM";
+  if (source.includes("cancellous")) return "Cancellous";
+  if (source.includes("fascia lata") || source.includes("pericardium")) return "Fascia Lata & Pericardium";
+  if (source.includes("soft tissue allograft") || source.includes("tendon")) return "Sports Medicine";
+  if (source.includes("cortical bone") || source.includes("traditional bone allograft")) return "Allograft Bone";
+  if (source.includes("acellular dermal") || source.includes("evoderm")) return "Acellular Dermal Matrix";
+  if (source.includes("bone marrow")) return "Bone Marrow";
+  if (/\bprp\b/.test(source)) return "PRP";
+  if (source.includes("hardware")) return "Hardware";
+  if (source.includes("synthetic")) return "Synthetics";
+  if (source.includes("private label")) return "Private Label";
+  return row.productClass?.trim() || "Other";
+}
+
+export function productFamilyOptions(rows: SalesTransaction[]) {
+  return Array.from(new Set(rows.map(productFamily).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
 export function withoutShippingStateFilter(filters: DashboardFilters): DashboardFilters {

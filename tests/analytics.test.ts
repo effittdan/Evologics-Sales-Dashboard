@@ -5,6 +5,8 @@ import {
   emptyFilters,
   entityMomentum,
   partitionNewTransactions,
+  productFamily,
+  productFamilyOptions,
   rankMomentumRows,
   salesTransactionKey,
   timeSeries,
@@ -107,6 +109,41 @@ describe("dashboard filters", () => {
         salesCategory: ["Wholesale"]
       })
     ).toEqual([wholesale]);
+  });
+
+  it("filters manager quick links against common sales-rep name variants", () => {
+    const sam = makeTransaction({ salesRepVendor: "Samuel Williamson" });
+    const other = makeTransaction({ documentNumber: "EV-2", salesRepVendor: "Other Rep" });
+
+    expect(applyFilters([sam, other], { ...emptyFilters, managers: ["Sam Williamson"] }))
+      .toEqual([sam]);
+  });
+
+  it("consolidates detailed item classes into business product families", () => {
+    const evoPatch = makeTransaction();
+    const dbm = makeTransaction({
+      documentNumber: "EV-2",
+      sku: "EV50205",
+      productDescription: "DBM Strip 50x20x5mm",
+      productClass: "Demineralized Bone Matrix : Strip"
+    });
+    const fascia = makeTransaction({
+      documentNumber: "EV-3",
+      sku: "FL-1",
+      productDescription: "Fascia Lata",
+      productClass: "Soft Tissue Allografts : Fascia Lata"
+    });
+
+    expect(productFamily(evoPatch)).toBe("EvoPatch");
+    expect(productFamily(dbm)).toBe("DBM");
+    expect(productFamily(fascia)).toBe("Fascia Lata & Pericardium");
+    expect(productFamilyOptions([evoPatch, dbm, fascia])).toEqual([
+      "DBM",
+      "EvoPatch",
+      "Fascia Lata & Pericardium"
+    ]);
+    expect(applyFilters([evoPatch, dbm, fascia], { ...emptyFilters, productClass: ["DBM"] }))
+      .toEqual([dbm]);
   });
 
   it("can remove only the shipping-state filter for cross-state account reports", () => {

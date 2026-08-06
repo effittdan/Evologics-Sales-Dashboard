@@ -360,10 +360,26 @@ h2 {
   font-weight: 500;
 }
 
-.filter-grid {
+.filter-rows {
   display: grid;
-  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.filter-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.filter-row-dates {
+  grid-template-columns: 1.25fr 1fr 0.8fr 0.8fr;
 }
 
 label {
@@ -408,6 +424,36 @@ input {
 select[multiple] {
   height: 86px;
   overflow: auto;
+}
+
+.manager-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px 12px;
+  min-height: 86px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.manager-links button {
+  padding: 0;
+  color: var(--secondary);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.manager-links button:hover,
+.manager-links button.selected {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-color: var(--gold);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .range-readout {
@@ -837,8 +883,9 @@ select[multiple] {
 }
 
 @media (max-width: 1180px) {
-  .filter-grid {
-    grid-template-columns: repeat(3, minmax(160px, 1fr));
+  .filter-row,
+  .filter-row-dates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .kpi-grid {
@@ -887,7 +934,8 @@ select[multiple] {
     padding-inline: 8px;
   }
 
-  .filter-grid,
+  .filter-row,
+  .filter-row-dates,
   .dashboard-grid,
   .kpi-grid,
   .kpi-grid.compact,
