@@ -9,6 +9,7 @@ import {
   productFamilyOptions,
   rankMomentumRows,
   salesTransactionKey,
+  skuOptionsForProductFamilies,
   timeSeries,
   withoutShippingStateFilter
 } from "../src/lib/analytics";
@@ -161,6 +162,13 @@ describe("dashboard filters", () => {
     ]);
     expect(applyFilters([evoPatch, dbm, fascia], { ...emptyFilters, productClass: ["DBM"] }))
       .toEqual([dbm]);
+    expect(skuOptionsForProductFamilies([evoPatch, dbm, fascia], ["DBM"]))
+      .toEqual(["EV50205"]);
+    expect(skuOptionsForProductFamilies([evoPatch, dbm, fascia], [])).toEqual([
+      "EAP-48",
+      "EV50205",
+      "FL-1"
+    ]);
   });
 
   it("can remove only the shipping-state filter for cross-state account reports", () => {

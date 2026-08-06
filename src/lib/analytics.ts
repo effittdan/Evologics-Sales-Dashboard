@@ -212,6 +212,17 @@ export function productFamilyOptions(rows: SalesTransaction[]) {
   return Array.from(new Set(rows.map(productFamily).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
+export function skuOptionsForProductFamilies(rows: SalesTransaction[], families: string[]) {
+  return Array.from(
+    new Set(
+      rows
+        .filter((row) => !families.length || families.includes(productFamily(row)))
+        .map((row) => row.sku)
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+}
+
 export function withoutShippingStateFilter(filters: DashboardFilters): DashboardFilters {
   return { ...filters, shippingState: [] };
 }

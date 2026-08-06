@@ -11,6 +11,7 @@ import {
   PackageSearch,
   Printer,
   RefreshCcw,
+  Search,
   SlidersHorizontal,
   TrendingUp,
   UserPlus,
@@ -54,6 +55,7 @@ import {
   resolveDateRange,
   salesDate,
   salesTransactionKey,
+  skuOptionsForProductFamilies,
   timeSeries,
   topByRevenue,
   withoutShippingStateFilter,
@@ -615,7 +617,7 @@ export function App() {
 
       <main className="main-panel">
         <header className="topbar">
-          <div>
+          <div className="topbar-heading">
             <p className="eyebrow">NetSuite source-agnostic import MVP</p>
             <h1>Evologics Sales Analytics</h1>
             <p className="subtle">
@@ -626,6 +628,11 @@ export function App() {
                 : ""}
             </p>
           </div>
+          <GlobalFilterSearch
+            rows={enriched}
+            filters={filters}
+            setFilters={setFilters}
+          />
           <div className="import-actions">
             <div className="user-chip">
               <span>{currentUser.name}</span>
@@ -1246,12 +1253,19 @@ function FilterPanel({
           label="Product class"
           values={filters.productClass}
           options={productFamilyOptions(rows)}
-          onChange={(values) => set("productClass", values)}
+          onChange={(values) => {
+            const availableSkus = new Set(skuOptionsForProductFamilies(rows, values));
+            setFilters({
+              ...filters,
+              productClass: values,
+              sku: filters.sku.filter((sku) => availableSkus.has(sku))
+            });
+          }}
         />
         <MultiSelect
           label="SKU"
           values={filters.sku}
-          options={skuFilterOptions(rows)}
+          options={skuOptionsForProductFamilies(rows, filters.productClass)}
           onChange={(values) => set("sku", values)}
         />
       </div>
@@ -1278,6 +1292,141 @@ function FilterPanel({
       </div>
     </section>
   );
+}
+
+type HeaderFilterOption = {
+  type: "Rep / vendor" | "Product class" | "SKU";
+  value: string;
+  label: string;
+};
+
+function GlobalFilterSearch({
+  rows,
+  filters,
+  setFilters
+}: {
+  rows: SalesTransaction[];
+  filters: DashboardFilters;
+  setFilters: (filters: DashboardFilters) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const options = useMemo<HeaderFilterOption[]>(
+    () => [
+      ...optionValues(rows, "salesRepVendor").map((value) => ({
+        type: "Rep / vendor" as const,
+        value,
+        label: value
+      })),
+      ...productFamilyOptions(rows).map((value) => ({
+        type: "Product class" as const,
+        value,
+        label: value
+      })),
+      ...skuFilterOptions(rows).map(({ value, label }) => ({
+        type: "SKU" as const,
+        value,
+        label
+      }))
+    ],
+    [rows]
+  );
+  const matches = useMemo(() => {
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    return options
+      .filter((option) => {
+        const searchable = `${option.type} ${option.label} ${option.value}`.toLowerCase();
+        return terms.every((term) => searchable.includes(term));
+      })
+      .slice(0, 10);
+  }, [options, query]);
+
+  useEffect(() => setActiveIndex(0), [query]);
+
+  function selectOption(option: HeaderFilterOption) {
+    if (option.type === "Rep / vendor") {
+      setFilters({
+        ...filters,
+        salesRepVendor: addUnique(filters.salesRepVendor, option.value)
+      });
+    } else if (option.type === "Product class") {
+      setFilters({ ...filters, productClass: addUnique(filters.productClass, option.value) });
+    } else {
+      setFilters({ ...filters, sku: addUnique(filters.sku, option.value) });
+    }
+    setQuery("");
+    setIsOpen(false);
+  }
+
+  return (
+    <div
+      className="header-filter-search"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsOpen(false);
+      }}
+    >
+      <Search size={18} aria-hidden="true" />
+      <input
+        type="search"
+        value={query}
+        placeholder="Search reps, classes, or SKUs"
+        aria-label="Search global filters"
+        aria-controls="header-filter-results"
+        aria-expanded={isOpen && Boolean(query.trim())}
+        role="combobox"
+        autoComplete="off"
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        onKeyDown={(event) => {
+          if (!matches.length) return;
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setIsOpen(true);
+            setActiveIndex((index) => Math.min(index + 1, matches.length - 1));
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex((index) => Math.max(index - 1, 0));
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            selectOption(matches[activeIndex] ?? matches[0]);
+          } else if (event.key === "Escape") {
+            setIsOpen(false);
+          }
+        }}
+      />
+      {isOpen && query.trim() ? (
+        <div className="header-filter-results" id="header-filter-results" role="listbox">
+          {matches.length ? (
+            matches.map((option, index) => (
+              <button
+                key={`${option.type}-${option.value}`}
+                className={index === activeIndex ? "active" : ""}
+                type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectOption(option)}
+              >
+                <span>{option.label}</span>
+                <small>{option.type}</small>
+              </button>
+            ))
+          ) : (
+            <div className="header-filter-empty">No matching filters</div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function addUnique(values: string[], value: string) {
+  return values.includes(value) ? values : [...values, value];
 }
 
 function Overview({
