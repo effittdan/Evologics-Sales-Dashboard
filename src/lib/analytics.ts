@@ -168,15 +168,15 @@ export const managerOptions = [
   "Ryan Gray",
   "Sam Williamson",
   "Garret Hebert",
-  "Ben Dupont"
+  "Jerry Pascucci"
 ] as const;
 
 const managerAliases: Record<(typeof managerOptions)[number], string[]> = {
   "Jim Courville": ["Jim Courville"],
-  "Ryan Gray": ["Ryan Gray"],
+  "Ryan Gray": ["Ryan Gray", "Rachel Gray", "Star Surgical Consultants LLC"],
   "Sam Williamson": ["Sam Williamson", "Samuel Williamson"],
   "Garret Hebert": ["Garret Hebert", "Garrett Hebert"],
-  "Ben Dupont": ["Ben Dupont", "Benjamin Dupont"]
+  "Jerry Pascucci": ["Jerry Pascucci", "Pascucci Enterprises"]
 };
 
 function matchesManager(value: string | undefined, selected: string[]) {

@@ -119,6 +119,23 @@ describe("dashboard filters", () => {
       .toEqual([sam]);
   });
 
+  it("filters managers by their assigned reps and distributors", () => {
+    const rachel = makeTransaction({ salesRepVendor: "Rachel Gray" });
+    const star = makeTransaction({
+      documentNumber: "EV-2",
+      salesRepVendor: "Star Surgical Consultants LLC"
+    });
+    const pascucci = makeTransaction({
+      documentNumber: "EV-3",
+      salesRepVendor: "Pascucci Enterprises"
+    });
+
+    expect(applyFilters([rachel, star, pascucci], { ...emptyFilters, managers: ["Ryan Gray"] }))
+      .toEqual([rachel, star]);
+    expect(applyFilters([rachel, star, pascucci], { ...emptyFilters, managers: ["Jerry Pascucci"] }))
+      .toEqual([pascucci]);
+  });
+
   it("consolidates detailed item classes into business product families", () => {
     const evoPatch = makeTransaction();
     const dbm = makeTransaction({

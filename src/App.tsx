@@ -115,7 +115,8 @@ const storageKeys = {
   reps: "evologics-sales-rep-mappings",
   skus: "evologics-sku-enrichments",
   users: "evologics-users",
-  session: "evologics-session"
+  session: "evologics-session",
+  lastLoginEmail: "evologics-last-login-email"
 };
 
 export function App() {
@@ -136,6 +137,9 @@ export function App() {
   );
   const [session, setSession] = useState<AppSession | null>(() =>
     shouldUseNetlifyIdentity() ? null : loadStored<AppSession | null>(storageKeys.session, null)
+  );
+  const [lastLoginEmail, setLastLoginEmail] = useState(() =>
+    loadStored(storageKeys.lastLoginEmail, "")
   );
   const [importMessage, setImportMessage] = useState("");
   const [authLoading, setAuthLoading] = useState(() => shouldUseNetlifyIdentity());
@@ -174,6 +178,12 @@ export function App() {
   }, [users]);
 
   useEffect(() => {
+    if (lastLoginEmail) {
+      localStorage.setItem(storageKeys.lastLoginEmail, JSON.stringify(lastLoginEmail));
+    }
+  }, [lastLoginEmail]);
+
+  useEffect(() => {
     if (netlifyIdentityEnabled) return;
     if (session) {
       localStorage.setItem(storageKeys.session, JSON.stringify(session));
@@ -195,6 +205,7 @@ export function App() {
         setSession(null);
         return;
       }
+      setLastLoginEmail(approvedUser.email);
       setSession({
         userId: approvedUser.id,
         signedInAt: new Date().toISOString(),
@@ -447,6 +458,7 @@ export function App() {
           item.id === approvedUser.id ? { ...item, lastLoginAt: signedInAt } : item
         )
       );
+      setLastLoginEmail(approvedUser.email);
       setSession({ userId: approvedUser.id, signedInAt, provider: "netlify" });
       return "";
     }
@@ -457,6 +469,7 @@ export function App() {
     setUsers((current) =>
       current.map((item) => (item.id === user.id ? { ...item, lastLoginAt: signedInAt } : item))
     );
+    setLastLoginEmail(user.email);
     setSession({ userId: user.id, signedInAt, provider: "local" });
     return "";
   }
@@ -480,6 +493,7 @@ export function App() {
         item.id === approvedUser.id ? { ...item, lastLoginAt: signedInAt } : item
       )
     );
+    setLastLoginEmail(approvedUser.email);
     setSession({ userId: approvedUser.id, signedInAt, provider: "netlify" });
     return "";
   }
@@ -502,6 +516,7 @@ export function App() {
         item.id === approvedUser.id ? { ...item, lastLoginAt: signedInAt } : item
       )
     );
+    setLastLoginEmail(approvedUser.email);
     setSession({ userId: approvedUser.id, signedInAt, provider: "netlify" });
     setAuthChallenge(null);
     return "";
@@ -552,6 +567,7 @@ export function App() {
     return (
       <LoginPanel
         authNotice={authNotice}
+        initialEmail={lastLoginEmail}
         isNetlifyIdentity={netlifyIdentityEnabled}
         onCreateAccount={createApprovedAccount}
         onSignIn={signIn}
@@ -840,16 +856,18 @@ function LoadingAuthPanel() {
 
 function LoginPanel({
   authNotice,
+  initialEmail,
   isNetlifyIdentity,
   onCreateAccount,
   onSignIn
 }: {
   authNotice: string;
+  initialEmail: string;
   isNetlifyIdentity: boolean;
   onCreateAccount: (email: string, password: string) => Promise<string>;
   onSignIn: (email: string, password: string) => Promise<string>;
 }) {
-  const [email, setEmail] = useState("theresa@evologicsamerica.com");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
