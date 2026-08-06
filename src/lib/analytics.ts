@@ -384,6 +384,15 @@ export function rankMomentumRows(
     .slice(0, limit);
 }
 
+export function rankMomentumRowsByVolume(rows: MomentumRow[], limit = 50) {
+  return [...rows]
+    .sort(
+      (a, b) =>
+        b.currentRevenue + b.previousRevenue - (a.currentRevenue + a.previousRevenue)
+    )
+    .slice(0, limit);
+}
+
 export function topByRevenue(
   rows: SalesTransaction[],
   key: keyof SalesTransaction,

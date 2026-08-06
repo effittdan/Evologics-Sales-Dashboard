@@ -51,6 +51,7 @@ import {
   productPerformance,
   productFamilyOptions,
   rankMomentumRows,
+  rankMomentumRowsByVolume,
   repPerformance,
   resolveDateRange,
   salesDate,
@@ -1295,7 +1296,19 @@ function FilterPanel({
 }
 
 type HeaderFilterOption = {
-  type: "Rep / vendor" | "Product class" | "SKU";
+  type: string;
+  key:
+    | "datePreset"
+    | "dateBasis"
+    | "salesRepVendor"
+    | "salesGroup"
+    | "managers"
+    | "salesCategory"
+    | "productClass"
+    | "sku"
+    | "customerName"
+    | "shippingState"
+    | "transactionType";
   value: string;
   label: string;
 };
@@ -1314,20 +1327,66 @@ function GlobalFilterSearch({
   const [activeIndex, setActiveIndex] = useState(0);
   const options = useMemo<HeaderFilterOption[]>(
     () => [
+      { type: "Date basis", key: "dateBasis", value: "transaction", label: "Transaction date" },
+      { type: "Date basis", key: "dateBasis", value: "created", label: "Date created" },
+      { type: "Date range", key: "datePreset", value: "all", label: "All data" },
+      { type: "Date range", key: "datePreset", value: "ytd", label: "YTD" },
+      { type: "Date range", key: "datePreset", value: "quarter", label: "Current quarter" },
+      { type: "Date range", key: "datePreset", value: "month", label: "Current month" },
+      { type: "Date range", key: "datePreset", value: "previousMonth", label: "Previous month" },
       ...optionValues(rows, "salesRepVendor").map((value) => ({
         type: "Rep / vendor" as const,
+        key: "salesRepVendor" as const,
+        value,
+        label: value
+      })),
+      ...optionValues(rows, "salesGroup").map((value) => ({
+        type: "Sales group",
+        key: "salesGroup" as const,
+        value,
+        label: value
+      })),
+      ...managerOptions.map((value) => ({
+        type: "Manager",
+        key: "managers" as const,
+        value,
+        label: value
+      })),
+      ...optionValues(rows, "salesCategory").map((value) => ({
+        type: "Category",
+        key: "salesCategory" as const,
         value,
         label: value
       })),
       ...productFamilyOptions(rows).map((value) => ({
         type: "Product class" as const,
+        key: "productClass" as const,
         value,
         label: value
       })),
       ...skuFilterOptions(rows).map(({ value, label }) => ({
         type: "SKU" as const,
+        key: "sku" as const,
         value,
         label
+      })),
+      ...optionValues(rows, "customerName").map((value) => ({
+        type: "Customer",
+        key: "customerName" as const,
+        value,
+        label: value
+      })),
+      ...optionValues(rows, "shippingState").map((value) => ({
+        type: "State",
+        key: "shippingState" as const,
+        value,
+        label: value
+      })),
+      ...optionValues(rows, "transactionType").map((value) => ({
+        type: "Transaction type",
+        key: "transactionType" as const,
+        value,
+        label: value
       }))
     ],
     [rows]
@@ -1336,25 +1395,58 @@ function GlobalFilterSearch({
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
     return options
-      .filter((option) => {
+      .map((option) => {
         const searchable = `${option.type} ${option.label} ${option.value}`.toLowerCase();
-        return terms.every((term) => searchable.includes(term));
+        if (!terms.every((term) => searchable.includes(term))) return null;
+        const label = option.label.toLowerCase();
+        const value = option.value.toLowerCase();
+        const phrase = terms.join(" ");
+        const score = label === phrase || value === phrase ? 0 : label.startsWith(phrase) ? 1 : 2;
+        return { option, score };
       })
-      .slice(0, 10);
+      .filter((match): match is { option: HeaderFilterOption; score: number } => Boolean(match))
+      .sort((a, b) => a.score - b.score || a.option.label.localeCompare(b.option.label))
+      .slice(0, 10)
+      .map((match) => match.option);
   }, [options, query]);
 
   useEffect(() => setActiveIndex(0), [query]);
 
   function selectOption(option: HeaderFilterOption) {
-    if (option.type === "Rep / vendor") {
+    if (option.key === "datePreset") {
+      setFilters({ ...filters, datePreset: option.value as DashboardFilters["datePreset"] });
+    } else if (option.key === "dateBasis") {
+      setFilters({ ...filters, dateBasis: option.value as DateBasis });
+    } else if (option.key === "salesRepVendor") {
       setFilters({
         ...filters,
         salesRepVendor: addUnique(filters.salesRepVendor, option.value)
       });
-    } else if (option.type === "Product class") {
-      setFilters({ ...filters, productClass: addUnique(filters.productClass, option.value) });
-    } else {
+    } else if (option.key === "salesGroup") {
+      setFilters({ ...filters, salesGroup: addUnique(filters.salesGroup, option.value) });
+    } else if (option.key === "managers") {
+      setFilters({ ...filters, managers: addUnique(filters.managers, option.value) });
+    } else if (option.key === "salesCategory") {
+      setFilters({ ...filters, salesCategory: addUnique(filters.salesCategory, option.value) });
+    } else if (option.key === "productClass") {
+      const productClass = addUnique(filters.productClass, option.value);
+      const availableSkus = new Set(skuOptionsForProductFamilies(rows, productClass));
+      setFilters({
+        ...filters,
+        productClass,
+        sku: filters.sku.filter((sku) => availableSkus.has(sku))
+      });
+    } else if (option.key === "sku") {
       setFilters({ ...filters, sku: addUnique(filters.sku, option.value) });
+    } else if (option.key === "customerName") {
+      setFilters({ ...filters, customerName: addUnique(filters.customerName, option.value) });
+    } else if (option.key === "shippingState") {
+      setFilters({ ...filters, shippingState: addUnique(filters.shippingState, option.value) });
+    } else {
+      setFilters({
+        ...filters,
+        transactionType: addUnique(filters.transactionType, option.value)
+      });
     }
     setQuery("");
     setIsOpen(false);
@@ -1371,7 +1463,7 @@ function GlobalFilterSearch({
       <input
         type="search"
         value={query}
-        placeholder="Search reps, classes, or SKUs"
+        placeholder="Search any filter"
         aria-label="Search global filters"
         aria-controls="header-filter-results"
         aria-expanded={isOpen && Boolean(query.trim())}
@@ -1404,7 +1496,7 @@ function GlobalFilterSearch({
           {matches.length ? (
             matches.map((option, index) => (
               <button
-                key={`${option.type}-${option.value}`}
+                key={`${option.key}-${option.value}`}
                 className={index === activeIndex ? "active" : ""}
                 type="button"
                 role="option"
@@ -1983,6 +2075,7 @@ function GrowthRiskView({
   const analysis = useMemo(() => entityMomentum(rows, entity, dateBasis), [rows, entity, dateBasis]);
   const topRows = rankMomentumRows(analysis?.rows ?? [], metric, "top");
   const bottomRows = rankMomentumRows(analysis?.rows ?? [], metric, "bottom");
+  const volumeRows = rankMomentumRowsByVolume(analysis?.rows ?? []);
   const currentRevenue = analysis?.rows.reduce((total, row) => total + row.currentRevenue, 0) ?? 0;
   const previousRevenue = analysis?.rows.reduce((total, row) => total + row.previousRevenue, 0) ?? 0;
   const growingCount = analysis?.rows.filter((row) => row.changeRevenue > 0).length ?? 0;
@@ -2065,6 +2158,13 @@ function GrowthRiskView({
               tone="negative"
               onSelectName={entity === "distributor" ? setSelectedDistributor : undefined}
             />
+            <MomentumTable
+              title={`Top 50 ${entityLabel} by 8-Week Sales Volume`}
+              rows={volumeRows}
+              tone="positive"
+              showChangePercent={false}
+              onSelectName={entity === "distributor" ? setSelectedDistributor : undefined}
+            />
           </div>
         </>
       )}
@@ -2076,11 +2176,13 @@ function MomentumTable({
   title,
   rows,
   tone,
+  showChangePercent = true,
   onSelectName
 }: {
   title: string;
   rows: MomentumRow[];
   tone: "positive" | "negative";
+  showChangePercent?: boolean;
   onSelectName?: (name: string) => void;
 }) {
   return (
@@ -2095,7 +2197,7 @@ function MomentumTable({
             <th>Current</th>
             <th>Prior</th>
             <th>Change</th>
-            <th>Change %</th>
+            {showChangePercent ? <th>Change %</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -2115,9 +2217,11 @@ function MomentumTable({
               <td className={row.changeRevenue < 0 ? "negative" : "positive"}>
                 {formatSignedCurrency(row.changeRevenue)}
               </td>
-              <td className={row.changeRevenue < 0 ? "negative" : "positive"}>
-                {row.previousRevenue === 0 && row.currentRevenue !== 0 ? "New" : formatPercent(row.changePct)}
-              </td>
+              {showChangePercent ? (
+                <td className={row.changeRevenue < 0 ? "negative" : "positive"}>
+                  {row.previousRevenue === 0 && row.currentRevenue !== 0 ? "New" : formatPercent(row.changePct)}
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

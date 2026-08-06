@@ -8,6 +8,7 @@ import {
   productFamily,
   productFamilyOptions,
   rankMomentumRows,
+  rankMomentumRowsByVolume,
   salesTransactionKey,
   skuOptionsForProductFamilies,
   timeSeries,
@@ -77,6 +78,10 @@ describe("weekly reporting", () => {
     expect(analysis?.rows.find((row) => row.name === "Partial Week")).toBeUndefined();
     expect(rankMomentumRows(analysis?.rows ?? [], "change", "top", 1)[0].name).toBe("Growing Hospital");
     expect(rankMomentumRows(analysis?.rows ?? [], "change", "bottom", 1)[0].name).toBe("Declining Hospital");
+    expect(rankMomentumRowsByVolume(analysis?.rows ?? [], 2).map((row) => row.name)).toEqual([
+      "Declining Hospital",
+      "Growing Hospital"
+    ]);
   });
 
   it("separates distributor customers from hospitals using sales category", () => {
