@@ -142,6 +142,38 @@ describe("dashboard filters", () => {
       .toEqual([pascucci]);
   });
 
+  it("groups Garrett Hebert's distributor territory under one manager filter", () => {
+    const assignedDistributors = [
+      "M2 Intuitive Solutions LLC",
+      "AEL Marketing Enterprises LLC",
+      "Caliber Medical Products, LLC",
+      "HealthTech Distributors LLC",
+      "Hunter Surgical LLC",
+      "JBD3 Holdings, LLC",
+      "Jor-Mar Medical, Inc.",
+      "Patriot Medical Distributions, LLC",
+      "Semple Health Consultants, LLC",
+      "Slopeside Medical Supplies Inc.",
+      "SurgiSolutions, LLC",
+      "Team Cross Medical, LLC",
+      "Adella Inc"
+    ];
+    const assignedRows = assignedDistributors.map((salesRepVendor, index) =>
+      makeTransaction({ documentNumber: `EV-${index + 1}`, salesRepVendor })
+    );
+    const unrelated = makeTransaction({
+      documentNumber: "EV-OTHER",
+      salesRepVendor: "Unrelated Distributor"
+    });
+
+    expect(
+      applyFilters([...assignedRows, unrelated], {
+        ...emptyFilters,
+        managers: ["Garrett Hebert"]
+      })
+    ).toEqual(assignedRows);
+  });
+
   it("consolidates detailed item classes into business product families", () => {
     const evoPatch = makeTransaction();
     const dbm = makeTransaction({

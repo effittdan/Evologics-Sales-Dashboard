@@ -167,7 +167,7 @@ export const managerOptions = [
   "Jim Courville",
   "Ryan Gray",
   "Sam Williamson",
-  "Garret Hebert",
+  "Garrett Hebert",
   "Jerry Pascucci"
 ] as const;
 
@@ -175,7 +175,23 @@ const managerAliases: Record<(typeof managerOptions)[number], string[]> = {
   "Jim Courville": ["Jim Courville"],
   "Ryan Gray": ["Ryan Gray", "Rachel Gray", "Star Surgical Consultants LLC"],
   "Sam Williamson": ["Sam Williamson", "Samuel Williamson"],
-  "Garret Hebert": ["Garret Hebert", "Garrett Hebert"],
+  "Garrett Hebert": [
+    "Garret Hebert",
+    "Garrett Hebert",
+    "M2 Intuitive Solutions LLC",
+    "AEL Marketing Enterprises LLC",
+    "Caliber Medical Products, LLC",
+    "HealthTech Distributors LLC",
+    "Hunter Surgical LLC",
+    "JBD3 Holdings, LLC",
+    "Jor-Mar Medical, Inc.",
+    "Patriot Medical Distributions, LLC",
+    "Semple Health Consultants, LLC",
+    "Slopeside Medical Supplies Inc.",
+    "SurgiSolutions, LLC",
+    "Team Cross Medical, LLC",
+    "Adella Inc"
+  ],
   "Jerry Pascucci": ["Jerry Pascucci", "Pascucci Enterprises"]
 };
 
