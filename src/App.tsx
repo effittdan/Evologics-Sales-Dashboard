@@ -129,7 +129,9 @@ const storageKeys = {
 
 export function App() {
   const [ledger, setLedger] = useState<ImportLedger>(() =>
-    loadStored(storageKeys.ledger, createEmptyImportLedger())
+    shouldUseSharedLedger()
+      ? createEmptyImportLedger()
+      : loadStored(storageKeys.ledger, createEmptyImportLedger())
   );
   const [filters, setFilters] = useState<DashboardFilters>(emptyFilters);
   const [activeView, setActiveView] = useState("overview");
@@ -172,8 +174,16 @@ export function App() {
   const canManageSalesData = currentUser?.role === "administrator";
 
   useEffect(() => {
-    localStorage.setItem(storageKeys.ledger, JSON.stringify(ledger));
-  }, [ledger]);
+    if (sharedLedgerEnabled) {
+      localStorage.removeItem(storageKeys.ledger);
+      return;
+    }
+    try {
+      localStorage.setItem(storageKeys.ledger, JSON.stringify(ledger));
+    } catch {
+      localStorage.removeItem(storageKeys.ledger);
+    }
+  }, [ledger, sharedLedgerEnabled]);
 
   useEffect(() => {
     localStorage.setItem(storageKeys.reps, JSON.stringify(repMappings));
