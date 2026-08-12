@@ -213,10 +213,13 @@ function matchesManager(value: string | undefined, selected: string[]) {
   );
 }
 
+const aMatrxSkus = new Set(["EAF-40", "EAF-80", "EAF-160", "EAF-250"]);
+
 export function productFamily(row: SalesTransaction) {
+  const sku = row.sku.trim().toUpperCase();
   const source = `${row.productClass ?? ""} ${row.productDescription} ${row.sku}`.toLowerCase();
   if (source.includes("evo patch") || source.includes("evopatch")) return "EvoPatch";
-  if (source.includes("a-matrx") || source.includes("amatrx") || source.includes("evoflakes")) return "A-MATRX";
+  if (aMatrxSkus.has(sku) || source.includes("a-matrx") || source.includes("amatrx") || source.includes("evoflakes")) return "A-MATRX";
   if (source.includes("demineralized bone matrix") || /\bdbm\b/.test(source)) return "DBM";
   if (source.includes("cancellous")) return "Cancellous";
   if (source.includes("fascia lata") || source.includes("pericardium")) return "Fascia Lata & Pericardium";

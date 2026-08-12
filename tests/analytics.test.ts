@@ -298,6 +298,14 @@ describe("dashboard filters", () => {
       productDescription: "A-MATRX",
       productClass: "Acellular Dermal Matrix"
     });
+    const aMatrxSkuRows = ["EAF-40", "EAF-80", "EAF-160", "EAF-250"].map((sku, index) =>
+      makeTransaction({
+        documentNumber: `EV-EAF-${index + 1}`,
+        sku,
+        productDescription: "Processed allograft",
+        productClass: "Other"
+      })
+    );
     const dbm = makeTransaction({
       documentNumber: "EV-2",
       sku: "EV50205",
@@ -313,6 +321,12 @@ describe("dashboard filters", () => {
 
     expect(productFamily(evoPatch)).toBe("EvoPatch");
     expect(productFamily(aMatrx)).toBe("A-MATRX");
+    expect(aMatrxSkuRows.map(productFamily)).toEqual([
+      "A-MATRX",
+      "A-MATRX",
+      "A-MATRX",
+      "A-MATRX"
+    ]);
     expect(productFamily(dbm)).toBe("DBM");
     expect(productFamily(fascia)).toBe("Fascia Lata & Pericardium");
     expect(productFamilyOptions([evoPatch, dbm, fascia])).toEqual([
@@ -322,6 +336,10 @@ describe("dashboard filters", () => {
       "Fascia Lata & Pericardium"
     ]);
     expect(productFamilyOptions([])).toEqual(["A-MATRX"]);
+    expect(applyFilters(aMatrxSkuRows, { ...emptyFilters, productClass: ["A-MATRX"] }))
+      .toEqual(aMatrxSkuRows);
+    expect(skuOptionsForProductFamilies(aMatrxSkuRows, ["A-MATRX"]))
+      .toEqual(["EAF-160", "EAF-250", "EAF-40", "EAF-80"]);
     expect(applyFilters([evoPatch, dbm, fascia], { ...emptyFilters, productClass: ["DBM"] }))
       .toEqual([dbm]);
     expect(skuOptionsForProductFamilies([evoPatch, dbm, fascia], ["DBM"]))
