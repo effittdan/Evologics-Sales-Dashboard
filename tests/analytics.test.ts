@@ -10,6 +10,7 @@ import {
   productFamilyOptions,
   rankMomentumRows,
   rankMomentumRowsByVolume,
+  resolveDateRange,
   salesTransactionKey,
   skuOptionsForProductFamilies,
   timeSeries,
@@ -148,6 +149,19 @@ describe("product class SKU unit analysis", () => {
 });
 
 describe("dashboard filters", () => {
+  it("selects the complete prior calendar year", () => {
+    const rows = [
+      makeTransaction({ transactionDate: "2025-01-03" }),
+      makeTransaction({ documentNumber: "EV-2", transactionDate: "2026-08-12" })
+    ];
+
+    expect(resolveDateRange(rows, { ...emptyFilters, datePreset: "previousYear" })).toEqual({
+      start: "2025-01-01",
+      end: "2025-12-31"
+    });
+    expect(applyFilters(rows, { ...emptyFilters, datePreset: "previousYear" })).toEqual([rows[0]]);
+  });
+
   it("filters sales by sales category", () => {
     const retail = makeTransaction({ documentNumber: "EV-1", salesCategory: "Direct Retail" });
     const wholesale = makeTransaction({ documentNumber: "EV-2", salesCategory: "Wholesale" });

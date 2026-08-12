@@ -1228,6 +1228,7 @@ function FilterPanel({
             <option value="quarter">Current quarter</option>
             <option value="month">Current month</option>
             <option value="previousMonth">Previous month</option>
+            <option value="previousYear">Previous year</option>
             <option value="custom">Custom</option>
           </select>
         </label>
@@ -1373,6 +1374,7 @@ function GlobalFilterSearch({
       { type: "Date range", key: "datePreset", value: "quarter", label: "Current quarter" },
       { type: "Date range", key: "datePreset", value: "month", label: "Current month" },
       { type: "Date range", key: "datePreset", value: "previousMonth", label: "Previous month" },
+      { type: "Date range", key: "datePreset", value: "previousYear", label: "Previous year" },
       ...optionValues(rows, "salesRepVendor").map((value) => ({
         type: "Rep / vendor" as const,
         key: "salesRepVendor" as const,

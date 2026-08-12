@@ -7,7 +7,14 @@ import type {
   SkuEnrichment
 } from "../types";
 
-export type DatePreset = "all" | "ytd" | "quarter" | "month" | "previousMonth" | "custom";
+export type DatePreset =
+  | "all"
+  | "ytd"
+  | "quarter"
+  | "month"
+  | "previousMonth"
+  | "previousYear"
+  | "custom";
 export type DateBasis = "transaction" | "created";
 
 export type DashboardFilters = {
@@ -267,6 +274,10 @@ export function resolveDateRange(rows: SalesTransaction[], filters: DashboardFil
       start: isoDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1))),
       end: range.end
     };
+  }
+  if (filters.datePreset === "previousYear") {
+    const previousYear = anchor.getUTCFullYear() - 1;
+    return { start: `${previousYear}-01-01`, end: `${previousYear}-12-31` };
   }
   const previousMonth = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 1, 1));
   return {
