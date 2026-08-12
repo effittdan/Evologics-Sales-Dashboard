@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 const approvedUsers = {
   "theresa@evologicsamerica.com": { roles: ["administrator"] },
@@ -23,6 +24,10 @@ const jsonHeaders = {
   "cache-control": "no-store",
   "content-type": "application/json"
 };
+
+const ledgerEncoding = "gzip-base64";
+const maxCompressedLedgerBytes = 12 * 1024 * 1024;
+const maxLedgerBytes = 50 * 1024 * 1024;
 
 export const handler = async (event, context) => {
   if (!["GET", "PUT"].includes(event.httpMethod)) {
@@ -53,7 +58,8 @@ export const handler = async (event, context) => {
 
     if (error) return json(500, { message: error.message });
     return json(200, {
-      ledger: normalizeLedger(data?.ledger),
+      ledgerEncoding,
+      compressedLedger: compressLedger(normalizeLedger(data?.ledger)),
       stateVersion: data?.version ?? 1,
       updatedAt: data?.updated_at ?? null,
       updatedByEmail: data?.updated_by_email ?? null
@@ -61,7 +67,7 @@ export const handler = async (event, context) => {
   }
 
   const body = parseBody(event.body);
-  const ledger = normalizeLedger(body?.ledger);
+  const ledger = normalizeLedger(parseLedger(body));
   if (!ledger) {
     return json(400, { message: "Request body must include a valid import ledger." });
   }
@@ -84,7 +90,6 @@ export const handler = async (event, context) => {
     });
   }
   return json(200, {
-    ledger: normalizeLedger(data.ledger),
     stateVersion: data.state_version,
     updatedAt: data.updated_at,
     updatedByEmail: data.updated_by_email
@@ -138,6 +143,24 @@ function parseBody(rawBody) {
   } catch {
     return null;
   }
+}
+
+function parseLedger(body) {
+  if (body?.ledger) return body.ledger;
+  if (body?.ledgerEncoding !== ledgerEncoding || typeof body?.compressedLedger !== "string") {
+    return null;
+  }
+  try {
+    const compressed = Buffer.from(body.compressedLedger, "base64");
+    if (compressed.length > maxCompressedLedgerBytes) return null;
+    return JSON.parse(gunzipSync(compressed, { maxOutputLength: maxLedgerBytes }).toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function compressLedger(ledger) {
+  return gzipSync(JSON.stringify(ledger)).toString("base64");
 }
 
 function json(statusCode, body) {

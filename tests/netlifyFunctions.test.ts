@@ -10,6 +10,10 @@ import {
   listRecentMessages
 } from "../netlify/functions/nightly-sales-email.mts";
 import { config as salesImportHistoryConfig } from "../netlify/functions/sales-import-history.mts";
+import {
+  compressJsonToBase64,
+  decompressJsonFromBase64
+} from "../src/lib/sharedLedger";
 
 type NetlifyResponse = {
   statusCode: number;
@@ -62,6 +66,27 @@ describe("Netlify functions", () => {
     expect(JSON.parse(response.body)).toMatchObject({
       message: "Sign in with an approved Evologics dashboard account."
     });
+  });
+
+  it("round-trips a large shared ledger through the compressed transport", async () => {
+    const ledger = {
+      version: 1,
+      transactions: Array.from({ length: 500 }, (_, index) => ({
+        transactionDate: "2025-12-31",
+        documentNumber: `EV-${index}`,
+        sku: "EAP-48",
+        revenue: 2250
+      })),
+      quality: [],
+      importedFileFingerprints: [],
+      importedTransactionKeys: []
+    };
+
+    const compressed = await compressJsonToBase64(ledger);
+    const restored = await decompressJsonFromBase64(compressed);
+
+    expect(restored).toEqual(ledger);
+    expect(compressed.length).toBeLessThan(JSON.stringify(ledger).length);
   });
 
   it("loads the Identity signup hook as an ES module", async () => {
