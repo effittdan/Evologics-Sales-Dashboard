@@ -292,6 +292,12 @@ describe("dashboard filters", () => {
 
   it("consolidates detailed item classes into business product families", () => {
     const evoPatch = makeTransaction();
+    const aMatrx = makeTransaction({
+      documentNumber: "EV-AM",
+      sku: "AM-001",
+      productDescription: "A-MATRX",
+      productClass: "Acellular Dermal Matrix"
+    });
     const dbm = makeTransaction({
       documentNumber: "EV-2",
       sku: "EV50205",
@@ -306,13 +312,16 @@ describe("dashboard filters", () => {
     });
 
     expect(productFamily(evoPatch)).toBe("EvoPatch");
+    expect(productFamily(aMatrx)).toBe("A-MATRX");
     expect(productFamily(dbm)).toBe("DBM");
     expect(productFamily(fascia)).toBe("Fascia Lata & Pericardium");
     expect(productFamilyOptions([evoPatch, dbm, fascia])).toEqual([
+      "A-MATRX",
       "DBM",
       "EvoPatch",
       "Fascia Lata & Pericardium"
     ]);
+    expect(productFamilyOptions([])).toEqual(["A-MATRX"]);
     expect(applyFilters([evoPatch, dbm, fascia], { ...emptyFilters, productClass: ["DBM"] }))
       .toEqual([dbm]);
     expect(skuOptionsForProductFamilies([evoPatch, dbm, fascia], ["DBM"]))

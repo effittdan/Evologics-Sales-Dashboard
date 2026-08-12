@@ -232,7 +232,8 @@ export function productFamily(row: SalesTransaction) {
 }
 
 export function productFamilyOptions(rows: SalesTransaction[]) {
-  return Array.from(new Set(rows.map(productFamily).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  return Array.from(new Set(["A-MATRX", ...rows.map(productFamily).filter(Boolean)]))
+    .sort((a, b) => a.localeCompare(b));
 }
 
 export function skuOptionsForProductFamilies(rows: SalesTransaction[], families: string[]) {
