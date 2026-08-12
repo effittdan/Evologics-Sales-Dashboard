@@ -48,7 +48,9 @@ import {
   managerOptions,
   optionValues,
   partitionNewTransactions,
+  productClassSkuUnits,
   productPerformance,
+  productFamily,
   productFamilyOptions,
   rankMomentumRows,
   rankMomentumRowsByVolume,
@@ -65,6 +67,8 @@ import {
   type MomentumEntity,
   type MomentumMetric,
   type MomentumRow,
+  type ProductClassUnitsMode,
+  type ProductClassSkuUnitsRow,
   type TimeSeriesGrain
 } from "./lib/analytics";
 import {
@@ -326,6 +330,17 @@ export function App() {
     [transactions, repMappings, skuEnrichments]
   );
   const filtered = useMemo(() => applyFilters(enriched, filters), [enriched, filters]);
+  const overviewProductRows = useMemo(
+    () => applyFilters(enriched, {
+      ...filters,
+      datePreset: "all",
+      customStart: undefined,
+      customEnd: undefined,
+      productClass: [],
+      sku: []
+    }),
+    [enriched, filters]
+  );
   const filteredWithoutState = useMemo(
     () => applyFilters(enriched, withoutShippingStateFilter(filters)),
     [enriched, filters]
@@ -710,7 +725,14 @@ export function App() {
         ) : (
           <>
             {activeView === "overview" && (
-              <Overview rows={filtered} metrics={metrics} dateBasis={filters.dateBasis} />
+              <Overview
+                rows={filtered}
+                productRows={overviewProductRows}
+                metrics={metrics}
+                filters={filters}
+                dateBasis={filters.dateBasis}
+                sourceUpdatedAt={sharedLedgerMeta?.updatedAt}
+              />
             )}
             {activeView === "trend" && (
               <TrendView
@@ -1530,22 +1552,105 @@ function addUnique(values: string[], value: string) {
 
 function Overview({
   rows,
+  productRows,
   metrics,
-  dateBasis
+  filters,
+  dateBasis,
+  sourceUpdatedAt
 }: {
   rows: SalesTransaction[];
+  productRows: SalesTransaction[];
   metrics: ReturnType<typeof kpis>;
+  filters: DashboardFilters;
   dateBasis: DateBasis;
+  sourceUpdatedAt?: string | null;
 }) {
+  const productClassOptions = useMemo(() => productFamilyOptions(productRows), [productRows]);
+  const [selectedProductClass, setSelectedProductClass] = useState(filters.productClass[0] ?? "");
+  const [unitMode, setUnitMode] = useState<ProductClassUnitsMode>("ytd");
+  const [selectedMonth, setSelectedMonth] = useState("");
   const monthly = timeSeries(rows, "month", dateBasis);
   const quarterly = timeSeries(rows, "quarter", dateBasis);
   const topReps = topByRevenue(rows, "salesRepVendor", 10);
   const topProducts = topByRevenue(rows, "sku", 10);
   const salesCategories = topByRevenue(rows, "salesCategory", 10);
   const productClass = topByRevenue(rows, "productClass", 10);
+  const range = dateRange(rows, dateBasis);
+  const filterSummary = overviewFilterSummary(filters);
+  const selectedClassRows = useMemo(
+    () => productRows.filter((row) => productFamily(row) === selectedProductClass),
+    [productRows, selectedProductClass]
+  );
+  const availableMonths = useMemo(
+    () => Array.from(new Set(selectedClassRows.map((row) => salesDate(row, dateBasis).slice(0, 7))))
+      .filter(Boolean)
+      .sort((a, b) => b.localeCompare(a)),
+    [selectedClassRows, dateBasis]
+  );
+  const activeMonth = availableMonths.includes(selectedMonth) ? selectedMonth : availableMonths[0] ?? "";
+  const unitAnalysis = useMemo(
+    () => productClassSkuUnits(productRows, selectedProductClass, unitMode, dateBasis, activeMonth),
+    [productRows, selectedProductClass, unitMode, dateBasis, activeMonth]
+  );
+
+  useEffect(() => {
+    if (filters.productClass.length === 1 && productClassOptions.includes(filters.productClass[0])) {
+      setSelectedProductClass(filters.productClass[0]);
+    }
+  }, [filters.productClass, productClassOptions]);
+
+  function printOverview() {
+    const previousTitle = document.title;
+    document.title = `Evologics sales overview${range?.end ? ` through ${range.end}` : ""}`;
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+    window.addEventListener("afterprint", restoreTitle);
+    window.print();
+  }
+
+  function printProductClassReport() {
+    if (!selectedProductClass || !unitAnalysis.rows.length) return;
+    const previousTitle = document.title;
+    document.title = `Evologics ${selectedProductClass} units - ${unitAnalysis.currentLabel}`;
+    document.body.classList.add("print-product-class-only");
+    const restorePrintState = () => {
+      document.title = previousTitle;
+      document.body.classList.remove("print-product-class-only");
+      window.removeEventListener("afterprint", restorePrintState);
+    };
+    window.addEventListener("afterprint", restorePrintState);
+    window.print();
+  }
 
   return (
-    <section className="view-stack">
+    <section className="view-stack overview-report">
+      <div className="overview-export-toolbar no-print">
+        <button className="upload-button" onClick={printOverview}>
+          <Printer size={18} />
+          Export PDF
+        </button>
+      </div>
+      <div className="overview-print-header print-only">
+        <div>
+          <p className="eyebrow">Sales analytics</p>
+          <h1>Overview snapshot</h1>
+          <p className="subtle">
+            {range
+              ? `${dateBasis === "created" ? "Created dates" : "Transaction dates"} ${range.start} to ${range.end}`
+              : "No sales rows match the current filters"}
+          </p>
+          <p className="overview-print-meta">
+            Generated {formatShortDateTime(new Date().toISOString())}
+            {sourceUpdatedAt ? ` | Source updated ${formatShortDateTime(sourceUpdatedAt)}` : ""}
+          </p>
+          <p className="overview-print-filters">
+            {filterSummary.length ? filterSummary.join(" | ") : "All sales data"}
+          </p>
+        </div>
+        <img src="/evologics-logo-wide.png" alt="Evologics" />
+      </div>
       <div className="kpi-grid">
         <Kpi label="Total revenue" value={formatCurrency(metrics.revenue)} />
         <Kpi label="Total quantity" value={formatNumber(metrics.quantity)} />
@@ -1574,8 +1679,148 @@ function Overview({
           {productClass.length ? <RevenueBar data={productClass} nameKey="name" /> : <SoftEmpty text="Upload a report with Class data or enrich SKUs to enable product-class reporting." />}
         </ChartCard>
       </div>
+      <section className="product-class-unit-report">
+        <div className="overview-print-header product-class-print-header">
+          <div>
+            <p className="eyebrow">Product class unit analysis</p>
+            <h1>{selectedProductClass || "Product class"}</h1>
+            <p className="subtle">
+              Units sold by SKU | {unitAnalysis.currentLabel}
+              {unitAnalysis.comparisonLabel ? ` vs ${unitAnalysis.comparisonLabel}` : ""}
+            </p>
+            <p className="overview-print-meta">
+              Generated {formatShortDateTime(new Date().toISOString())}
+              {sourceUpdatedAt ? ` | Source updated ${formatShortDateTime(sourceUpdatedAt)}` : ""}
+            </p>
+          </div>
+          <img src="/evologics-logo-wide.png" alt="Evologics" />
+        </div>
+        <div className="section-header product-class-unit-header">
+          <div>
+            <p className="eyebrow">Unit performance</p>
+            <h2>Units sold by SKU</h2>
+            <p className="subtle">Compare every SKU in a product class across monthly and annual periods.</p>
+          </div>
+          <button
+            className="upload-button no-print"
+            type="button"
+            onClick={printProductClassReport}
+            disabled={!selectedProductClass || !unitAnalysis.rows.length}
+          >
+            <Printer size={18} />
+            Export PDF
+          </button>
+        </div>
+        <div className="product-class-controls no-print">
+          <label>
+            Product class
+            <select value={selectedProductClass} onChange={(event) => setSelectedProductClass(event.target.value)}>
+              <option value="">Select a product class</option>
+              {productClassOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <div className="product-class-period-control">
+            <span>Period</span>
+            <div className="segmented" aria-label="Unit analysis period">
+              {([
+                ["ytd", "YTD"],
+                ["month", "Monthly"],
+                ["mom", "Month / Month"],
+                ["yoy", "Year / Year"]
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={unitMode === value ? "active" : ""}
+                  onClick={() => setUnitMode(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {(unitMode === "month" || unitMode === "mom") ? (
+            <label>
+              Month
+              <select value={activeMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
+                {availableMonths.map((month) => (
+                  <option key={month} value={month}>{formatMonthOption(month)}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {!selectedProductClass ? (
+          <SoftEmpty text="Select a product class to see total units sold by SKU." />
+        ) : unitAnalysis.rows.length ? (
+          <>
+            <div className="product-class-summary">
+              <div><span>Product class</span><strong>{selectedProductClass}</strong></div>
+              <div><span>{unitAnalysis.currentLabel}</span><strong>{formatNumber(sumUnitField(unitAnalysis.rows, "currentUnits"))}</strong></div>
+              {unitAnalysis.comparisonLabel ? (
+                <div><span>{unitAnalysis.comparisonLabel}</span><strong>{formatNumber(sumUnitField(unitAnalysis.rows, "comparisonUnits"))}</strong></div>
+              ) : null}
+              <div><span>SKUs</span><strong>{unitAnalysis.rows.length.toLocaleString()}</strong></div>
+            </div>
+            <ChartCard title={`Units by SKU | ${unitAnalysis.currentLabel}${unitAnalysis.comparisonLabel ? ` vs ${unitAnalysis.comparisonLabel}` : ""}`}>
+              <SkuUnitsBar data={unitAnalysis.rows} comparisonLabel={unitAnalysis.comparisonLabel} />
+            </ChartCard>
+            <div className="table-card product-class-unit-table">
+              <h2>SKU detail</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>{unitAnalysis.currentLabel}</th>
+                    {unitAnalysis.comparisonLabel ? <th>{unitAnalysis.comparisonLabel}</th> : null}
+                    {unitAnalysis.comparisonLabel ? <th>Unit change</th> : null}
+                    {unitAnalysis.comparisonLabel ? <th>% change</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {unitAnalysis.rows.map((row) => (
+                    <tr key={row.sku}>
+                      <td className="sku-cell">{row.sku}</td>
+                      <td>{row.description || "No product description"}</td>
+                      <td>{formatNumber(row.currentUnits)}</td>
+                      {unitAnalysis.comparisonLabel ? <td>{formatNumber(row.comparisonUnits)}</td> : null}
+                      {unitAnalysis.comparisonLabel ? <td>{formatSignedNumber(row.changeUnits)}</td> : null}
+                      {unitAnalysis.comparisonLabel ? (
+                        <td>{row.comparisonUnits === 0 && row.currentUnits !== 0 ? "New" : formatPercent(row.changePct)}</td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <SoftEmpty text="No SKU unit data is available for this product class." />
+        )}
+      </section>
     </section>
   );
+}
+
+function overviewFilterSummary(filters: DashboardFilters) {
+  const selections: Array<[string, string[]]> = [
+    ["Sales rep / vendor", filters.salesRepVendor],
+    ["Sales group", filters.salesGroup],
+    ["Managers", filters.managers],
+    ["Category", filters.salesCategory],
+    ["Product class", filters.productClass],
+    ["SKU", filters.sku],
+    ["Customer", filters.customerName],
+    ["State", filters.shippingState],
+    ["Transaction type", filters.transactionType]
+  ];
+
+  return selections
+    .filter(([, values]) => values.length)
+    .map(([label, values]) =>
+      `${label}: ${values.length <= 3 ? values.join(", ") : `${values.length} selected`}`
+    );
 }
 
 function TrendView({
@@ -2715,6 +2960,39 @@ function RevenueBar({
   );
 }
 
+function SkuUnitsBar({
+  data,
+  comparisonLabel
+}: {
+  data: ProductClassSkuUnitsRow[];
+  comparisonLabel?: string;
+}) {
+  const chartHeight = Math.max(320, data.length * (comparisonLabel ? 38 : 30));
+  return (
+    <>
+      <div className="unit-chart-legend" aria-hidden="true">
+        <span><i className="current" />Current</span>
+        {comparisonLabel ? <span><i className="comparison" />Comparison</span> : null}
+      </div>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 34, bottom: 12, left: 18 }}>
+          <CartesianGrid stroke="#DDE7E1" horizontal={false} />
+          <XAxis type="number" tick={{ fill: "#6F7775", fontSize: 12 }} />
+          <YAxis type="category" dataKey="sku" width={100} tick={{ fill: "#252A2A", fontSize: 11 }} />
+          <Tooltip
+            formatter={(value, name) => [formatNumber(Number(value)), name === "currentUnits" ? "Current units" : "Comparison units"]}
+            labelFormatter={(sku) => data.find((row) => row.sku === sku)?.description || String(sku)}
+          />
+          <Bar dataKey="currentUnits" fill="#1F4F45" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+          {comparisonLabel ? (
+            <Bar dataKey="comparisonUnits" fill="#C9B27E" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+          ) : null}
+        </BarChart>
+      </ResponsiveContainer>
+    </>
+  );
+}
+
 function MultiSelect({
   label,
   values,
@@ -2859,6 +3137,20 @@ function formatShortDateTime(value: string) {
 function formatSignedCurrency(value: number) {
   if (value === 0) return formatCurrency(0);
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
+}
+
+function formatSignedNumber(value: number) {
+  if (value === 0) return formatNumber(0);
+  return `${value > 0 ? "+" : "-"}${formatNumber(Math.abs(value))}`;
+}
+
+function sumUnitField(rows: ProductClassSkuUnitsRow[], field: "currentUnits" | "comparisonUnits") {
+  return rows.reduce((total, row) => total + row[field], 0);
+}
+
+function formatMonthOption(month: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${month}-01T00:00:00.000Z`));
 }
 
 function combineQualityRanges(quality: ImportQualitySummary[]) {

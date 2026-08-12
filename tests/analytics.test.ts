@@ -5,6 +5,7 @@ import {
   emptyFilters,
   entityMomentum,
   partitionNewTransactions,
+  productClassSkuUnits,
   productFamily,
   productFamilyOptions,
   rankMomentumRows,
@@ -101,6 +102,48 @@ describe("weekly reporting", () => {
       .toEqual(["Regional Distributor"]);
     expect(entityMomentum([distributor, hospital, anchor], "hospital")?.rows.map((row) => row.name).sort())
       .toEqual(["Regional Hospital"]);
+  });
+});
+
+describe("product class SKU unit analysis", () => {
+  const rows = [
+    makeTransaction({ transactionDate: "2025-03-05", quantity: 4 }),
+    makeTransaction({ documentNumber: "EV-2", transactionDate: "2026-02-10", quantity: 3 }),
+    makeTransaction({ documentNumber: "EV-3", transactionDate: "2026-03-05", quantity: 8 }),
+    makeTransaction({
+      documentNumber: "EV-4",
+      transactionDate: "2026-02-18",
+      sku: "EAP-24",
+      productDescription: "EvoPatch Dual Layer Amnion 2x4cm",
+      quantity: 5
+    }),
+    makeTransaction({
+      documentNumber: "EV-5",
+      transactionDate: "2026-03-07",
+      sku: "DBM-1",
+      productDescription: "DBM Putty",
+      productClass: "Demineralized Bone Matrix",
+      quantity: 99
+    })
+  ];
+
+  it("compares a selected month with the previous month and keeps every class SKU", () => {
+    const analysis = productClassSkuUnits(rows, "EvoPatch", "mom", "transaction", "2026-03");
+
+    expect(analysis).toMatchObject({ currentLabel: "Mar 2026", comparisonLabel: "Feb 2026" });
+    expect(analysis.rows).toEqual([
+      expect.objectContaining({ sku: "EAP-48", currentUnits: 8, comparisonUnits: 3, changeUnits: 5 }),
+      expect.objectContaining({ sku: "EAP-24", currentUnits: 0, comparisonUnits: 5, changeUnits: -5 })
+    ]);
+  });
+
+  it("compares current YTD units with the same date in the prior year", () => {
+    const analysis = productClassSkuUnits(rows, "EvoPatch", "yoy");
+    const evoPatch = analysis.rows.find((row) => row.sku === "EAP-48");
+
+    expect(analysis).toMatchObject({ currentLabel: "2026 YTD", comparisonLabel: "2025 YTD" });
+    expect(evoPatch).toMatchObject({ currentUnits: 11, comparisonUnits: 4, changeUnits: 7 });
+    expect(evoPatch?.changePct).toBeCloseTo(1.75);
   });
 });
 

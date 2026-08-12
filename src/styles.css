@@ -567,6 +567,36 @@ select[multiple] {
   gap: 18px;
 }
 
+.overview-export-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.print-only {
+  display: none;
+}
+
+.overview-print-header {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.overview-print-header img {
+  width: 180px;
+  height: auto;
+}
+
+.overview-print-meta,
+.overview-print-filters {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -604,6 +634,130 @@ select[multiple] {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+}
+
+.product-class-unit-report {
+  display: grid;
+  gap: 18px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.product-class-print-header {
+  display: none;
+}
+
+.product-class-controls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fbf9;
+}
+
+.product-class-controls label,
+.product-class-period-control {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.product-class-controls select {
+  min-width: 210px;
+  min-height: 42px;
+  padding: 0 36px 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: #252a2a;
+  background: #fff;
+}
+
+.product-class-period-control .segmented {
+  min-height: 42px;
+}
+
+.product-class-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.product-class-summary > div {
+  min-width: 0;
+  padding: 13px 15px;
+  border-left: 3px solid var(--gold);
+  background: #f8fbf9;
+}
+
+.product-class-summary span,
+.product-class-summary strong {
+  display: block;
+}
+
+.product-class-summary span {
+  color: var(--muted);
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.product-class-summary strong {
+  margin-top: 5px;
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.unit-chart-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin: -4px 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.unit-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unit-chart-legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--primary);
+}
+
+.unit-chart-legend i.comparison {
+  background: var(--gold);
+}
+
+.product-class-unit-table table {
+  min-width: 760px;
+}
+
+.product-class-unit-table th:nth-child(n + 3),
+.product-class-unit-table td:nth-child(n + 3) {
+  text-align: right;
+}
+
+.sku-cell {
+  color: var(--primary);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .chart-card {
@@ -1045,6 +1199,22 @@ select[multiple] {
     padding-inline: 8px;
   }
 
+  .product-class-controls,
+  .product-class-summary {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .product-class-controls select,
+  .product-class-period-control .segmented {
+    width: 100%;
+  }
+
+  .product-class-period-control .segmented {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .filter-row,
   .filter-row-dates,
   .dashboard-grid,
@@ -1075,8 +1245,20 @@ select[multiple] {
     margin: 0.35in;
   }
 
+  @page overview {
+    size: landscape;
+    margin: 0.3in;
+  }
+
   body {
     background: #fff;
+  }
+
+  html,
+  #root,
+  .app-shell,
+  .main-panel {
+    background: #fff !important;
   }
 
   .sidebar,
@@ -1100,6 +1282,92 @@ select[multiple] {
   .rep-report,
   .report-page {
     display: block;
+  }
+
+  .print-only {
+    display: flex;
+  }
+
+  .overview-report {
+    page: overview;
+  }
+
+  body.print-product-class-only .overview-report > :not(.product-class-unit-report) {
+    display: none !important;
+  }
+
+  body.print-product-class-only .product-class-unit-report {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  body.print-product-class-only .product-class-unit-header {
+    display: none;
+  }
+
+  body.print-product-class-only .product-class-print-header {
+    display: flex;
+    margin-bottom: 4px;
+  }
+
+  .overview-print-header {
+    margin-bottom: 12px;
+  }
+
+  .overview-report .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .overview-report .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .product-class-unit-report {
+    gap: 10px;
+    break-before: page;
+  }
+
+  body.print-product-class-only .product-class-unit-report {
+    break-before: auto;
+  }
+
+  .product-class-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .product-class-summary > div {
+    padding: 8px 10px;
+  }
+
+  .product-class-summary strong {
+    font-size: 16px;
+  }
+
+  .product-class-unit-report .chart-card h2,
+  .product-class-unit-report .table-card h2 {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .product-class-unit-report .recharts-responsive-container {
+    height: 420px !important;
+  }
+
+  .product-class-unit-report .recharts-tooltip-wrapper {
+    display: none !important;
+  }
+
+  .overview-report .kpi-card {
+    padding: 9px 10px;
+  }
+
+  .overview-report .kpi-card strong {
+    margin-top: 5px;
+    font-size: 20px;
   }
 
   .report-page,

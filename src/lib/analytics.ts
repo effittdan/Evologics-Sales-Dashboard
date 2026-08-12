@@ -292,6 +292,23 @@ export function kpis(rows: SalesTransaction[]) {
 export type TimeSeriesGrain = "day" | "week" | "month" | "quarter" | "year";
 export type MomentumEntity = "distributor" | "state" | "hospital";
 export type MomentumMetric = "change" | "revenue";
+export type ProductClassUnitsMode = "ytd" | "month" | "mom" | "yoy";
+
+export type ProductClassSkuUnitsRow = {
+  sku: string;
+  description: string;
+  currentUnits: number;
+  comparisonUnits: number;
+  changeUnits: number;
+  changePct: number | null;
+};
+
+export type ProductClassSkuUnitsAnalysis = {
+  currentLabel: string;
+  comparisonLabel?: string;
+  anchorDate?: string;
+  rows: ProductClassSkuUnitsRow[];
+};
 
 export type MomentumRow = {
   name: string;
@@ -326,6 +343,77 @@ export function timeSeries(
       ...row,
       changePct: index > 0 && all[index - 1].revenue ? row.revenue / all[index - 1].revenue - 1 : null
     }));
+}
+
+export function productClassSkuUnits(
+  rows: SalesTransaction[],
+  productClass: string,
+  mode: ProductClassUnitsMode,
+  dateBasis: DateBasis = "transaction",
+  selectedMonth?: string
+): ProductClassSkuUnitsAnalysis {
+  const classRows = rows.filter((row) => productFamily(row) === productClass);
+  const classRange = dateRange(classRows, dateBasis);
+  if (!classRange) return { currentLabel: "No data", rows: [] };
+
+  const anchorDate = classRange.end;
+  const anchorMonth = selectedMonth && /^\d{4}-\d{2}$/.test(selectedMonth)
+    ? selectedMonth
+    : anchorDate.slice(0, 7);
+  const anchorYear = anchorDate.slice(0, 4);
+  let currentStart = `${anchorYear}-01-01`;
+  let currentEnd = anchorDate;
+  let currentLabel = `${anchorYear} YTD`;
+  let comparisonStart: string | undefined;
+  let comparisonEnd: string | undefined;
+  let comparisonLabel: string | undefined;
+
+  if (mode === "month" || mode === "mom") {
+    currentStart = `${anchorMonth}-01`;
+    currentEnd = monthEnd(anchorMonth);
+    currentLabel = formatMonthLabel(anchorMonth);
+  }
+
+  if (mode === "mom") {
+    const previousMonth = shiftMonth(anchorMonth, -1);
+    comparisonStart = `${previousMonth}-01`;
+    comparisonEnd = monthEnd(previousMonth);
+    comparisonLabel = formatMonthLabel(previousMonth);
+  }
+
+  if (mode === "yoy") {
+    comparisonStart = `${Number(anchorYear) - 1}-01-01`;
+    comparisonEnd = shiftYearClamped(anchorDate, -1);
+    comparisonLabel = `${Number(anchorYear) - 1} YTD`;
+  }
+
+  const grouped = groupBy(classRows, (row) => row.sku || "Unassigned");
+  const analysisRows = Object.entries(grouped)
+    .map(([sku, skuRows]) => {
+      const currentUnits = sum(
+        skuRows.filter((row) => withinRange(salesDate(row, dateBasis), currentStart, currentEnd)),
+        "quantity"
+      );
+      const comparisonUnits = comparisonStart && comparisonEnd
+        ? sum(
+            skuRows.filter((row) =>
+              withinRange(salesDate(row, dateBasis), comparisonStart, comparisonEnd)
+            ),
+            "quantity"
+          )
+        : 0;
+      return {
+        sku,
+        description: skuRows.find((row) => row.productDescription)?.productDescription ?? "",
+        currentUnits,
+        comparisonUnits,
+        changeUnits: currentUnits - comparisonUnits,
+        changePct: comparisonUnits ? currentUnits / comparisonUnits - 1 : null
+      };
+    })
+    .sort((a, b) => b.currentUnits - a.currentUnits || b.comparisonUnits - a.comparisonUnits || a.sku.localeCompare(b.sku));
+
+  return { currentLabel, comparisonLabel, anchorDate, rows: analysisRows };
 }
 
 export function entityMomentum(
@@ -568,6 +656,34 @@ function periodChange(
 
 function parseDate(dateValue: string) {
   return new Date(`${dateValue}T00:00:00.000Z`);
+}
+
+function withinRange(date: string, start: string, end: string) {
+  return date >= start && date <= end;
+}
+
+function shiftMonth(month: string, amount: number) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, monthNumber - 1 + amount, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthEnd(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return isoDate(new Date(Date.UTC(year, monthNumber, 0)));
+}
+
+function shiftYearClamped(dateValue: string, amount: number) {
+  const date = parseDate(dateValue);
+  const year = date.getUTCFullYear() + amount;
+  const month = date.getUTCMonth();
+  const day = Math.min(date.getUTCDate(), new Date(Date.UTC(year, month + 1, 0)).getUTCDate());
+  return isoDate(new Date(Date.UTC(year, month, day)));
+}
+
+function formatMonthLabel(month: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" })
+    .format(parseDate(`${month}-01`));
 }
 
 function isoDate(date: Date) {
