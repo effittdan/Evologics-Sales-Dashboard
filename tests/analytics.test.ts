@@ -5,6 +5,7 @@ import {
   emptyFilters,
   entityMomentum,
   partitionNewTransactions,
+  periodComparison,
   productClassSkuUnits,
   productFamily,
   productFamilyOptions,
@@ -145,6 +146,46 @@ describe("product class SKU unit analysis", () => {
     expect(analysis).toMatchObject({ currentLabel: "2026 YTD", comparisonLabel: "2025 YTD" });
     expect(evoPatch).toMatchObject({ currentUnits: 11, comparisonUnits: 4, changeUnits: 7 });
     expect(evoPatch?.changePct).toBeCloseTo(1.75);
+  });
+});
+
+describe("period comparisons", () => {
+  const comparisonRows = [
+    makeTransaction({ transactionDate: "2025-01-10", revenue: 100, quantity: 2 }),
+    makeTransaction({ documentNumber: "EV-2", transactionDate: "2025-02-10", revenue: 200, quantity: 4 }),
+    makeTransaction({ documentNumber: "EV-3", transactionDate: "2026-01-10", revenue: 150, quantity: 3 }),
+    makeTransaction({ documentNumber: "EV-4", transactionDate: "2026-02-10", revenue: 300, quantity: 6 }),
+    makeTransaction({ documentNumber: "EV-5", transactionDate: "2026-03-05", revenue: 50, quantity: 1 })
+  ];
+
+  it("compares year to date with the same prior-year cutoff", () => {
+    const analysis = periodComparison(comparisonRows, "yoy", "transaction", "2026-02-10");
+
+    expect(analysis).toMatchObject({
+      currentLabel: "2026 YTD",
+      previousLabel: "2025 YTD",
+      currentRange: { start: "2026-01-01", end: "2026-02-10" },
+      previousRange: { start: "2025-01-01", end: "2025-02-10" },
+      currentRevenue: 450,
+      previousRevenue: 300,
+      currentQuantity: 9,
+      previousQuantity: 6
+    });
+    expect(analysis?.revenueChangePct).toBeCloseTo(0.5);
+    expect(analysis?.series).toHaveLength(2);
+    expect(analysis?.series.at(-1)).toMatchObject({ currentRevenue: 450, previousRevenue: 300 });
+  });
+
+  it("uses equal elapsed days for month and quarter comparisons", () => {
+    const month = periodComparison(comparisonRows, "mom", "transaction", "2026-02-10");
+    const quarter = periodComparison(comparisonRows, "qoq", "transaction", "2026-02-10");
+
+    expect(month?.currentRange).toEqual({ start: "2026-02-01", end: "2026-02-10" });
+    expect(month?.previousRange).toEqual({ start: "2026-01-01", end: "2026-01-10" });
+    expect(month?.currentRevenue).toBe(300);
+    expect(month?.previousRevenue).toBe(150);
+    expect(quarter?.currentRange).toEqual({ start: "2026-01-01", end: "2026-02-10" });
+    expect(quarter?.previousRange).toEqual({ start: "2025-10-01", end: "2025-11-10" });
   });
 });
 

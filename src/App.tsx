@@ -48,6 +48,7 @@ import {
   managerOptions,
   optionValues,
   partitionNewTransactions,
+  periodComparison,
   productClassSkuUnits,
   productPerformance,
   productFamily,
@@ -67,6 +68,8 @@ import {
   type MomentumEntity,
   type MomentumMetric,
   type MomentumRow,
+  type PeriodComparisonAnalysis,
+  type PeriodComparisonMode,
   type ProductClassUnitsMode,
   type ProductClassSkuUnitsRow,
   type TimeSeriesGrain
@@ -340,6 +343,15 @@ export function App() {
     [transactions, repMappings, skuEnrichments]
   );
   const filtered = useMemo(() => applyFilters(enriched, filters), [enriched, filters]);
+  const comparisonRows = useMemo(
+    () => applyFilters(enriched, {
+      ...filters,
+      datePreset: "all",
+      customStart: undefined,
+      customEnd: undefined
+    }),
+    [enriched, filters]
+  );
   const overviewProductRows = useMemo(
     () => applyFilters(enriched, {
       ...filters,
@@ -738,19 +750,23 @@ export function App() {
               <Overview
                 rows={filtered}
                 productRows={overviewProductRows}
+                comparisonRows={comparisonRows}
                 metrics={metrics}
                 filters={filters}
                 dateBasis={filters.dateBasis}
+                comparisonAnchor={filteredRange?.end}
                 sourceUpdatedAt={sharedLedgerMeta?.updatedAt}
               />
             )}
             {activeView === "trend" && (
               <TrendView
                 rows={filtered}
+                comparisonRows={comparisonRows}
                 grain={trendGrain}
                 setGrain={setTrendGrain}
                 yearsLoaded={yearsLoaded}
                 dateBasis={filters.dateBasis}
+                comparisonAnchor={filteredRange?.end}
               />
             )}
             {activeView === "reps" && (
@@ -1565,16 +1581,20 @@ function addUnique(values: string[], value: string) {
 function Overview({
   rows,
   productRows,
+  comparisonRows,
   metrics,
   filters,
   dateBasis,
+  comparisonAnchor,
   sourceUpdatedAt
 }: {
   rows: SalesTransaction[];
   productRows: SalesTransaction[];
+  comparisonRows: SalesTransaction[];
   metrics: ReturnType<typeof kpis>;
   filters: DashboardFilters;
   dateBasis: DateBasis;
+  comparisonAnchor?: string;
   sourceUpdatedAt?: string | null;
 }) {
   const productClassOptions = useMemo(() => productFamilyOptions(productRows), [productRows]);
@@ -1589,6 +1609,12 @@ function Overview({
   const productClass = topByRevenue(rows, "productClass", 10);
   const range = dateRange(rows, dateBasis);
   const filterSummary = overviewFilterSummary(filters);
+  const periodComparisons = useMemo(
+    () => (["yoy", "qoq", "mom"] as const)
+      .map((mode) => periodComparison(comparisonRows, mode, dateBasis, comparisonAnchor))
+      .filter((analysis): analysis is PeriodComparisonAnalysis => Boolean(analysis)),
+    [comparisonRows, dateBasis, comparisonAnchor]
+  );
   const selectedClassRows = useMemo(
     () => productRows.filter((row) => productFamily(row) === selectedProductClass),
     [productRows, selectedProductClass]
@@ -1691,7 +1717,34 @@ function Overview({
           {productClass.length ? <RevenueBar data={productClass} nameKey="name" /> : <SoftEmpty text="Upload a report with Class data or enrich SKUs to enable product-class reporting." />}
         </ChartCard>
       </div>
-      <section className="product-class-unit-report">
+      <section className="historical-comparison-summary">
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Historical performance</p>
+            <h2>Period comparisons</h2>
+            <p className="subtle">Revenue and units through matching elapsed-day cutoffs.</p>
+          </div>
+        </div>
+        <div className="comparison-card-grid">
+          {periodComparisons.map((analysis) => (
+            <article className="comparison-card" key={analysis.mode}>
+              <div className="comparison-card-heading">
+                <span>{comparisonModeLabel(analysis.mode)}</span>
+                <strong className={comparisonTone(analysis.revenueChangePct)}>
+                  {formatPercent(analysis.revenueChangePct)}
+                </strong>
+              </div>
+              <h3>{formatCurrency(analysis.currentRevenue)}</h3>
+              <p>{analysis.currentLabel}</p>
+              <dl>
+                <div><dt>Comparable</dt><dd>{formatCurrency(analysis.previousRevenue)}</dd></div>
+                <div><dt>Units</dt><dd>{formatNumber(analysis.currentQuantity)} vs {formatNumber(analysis.previousQuantity)}</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className={`product-class-unit-report${selectedProductClass ? "" : " product-class-unit-report-empty"}`}>
         <div className="overview-print-header product-class-print-header">
           <div>
             <p className="eyebrow">Product class unit analysis</p>
@@ -1837,18 +1890,28 @@ function overviewFilterSummary(filters: DashboardFilters) {
 
 function TrendView({
   rows,
+  comparisonRows,
   grain,
   setGrain,
   yearsLoaded,
-  dateBasis
+  dateBasis,
+  comparisonAnchor
 }: {
   rows: SalesTransaction[];
+  comparisonRows: SalesTransaction[];
   grain: TimeSeriesGrain;
   setGrain: (grain: TimeSeriesGrain) => void;
   yearsLoaded: number;
   dateBasis: DateBasis;
+  comparisonAnchor?: string;
 }) {
+  const [comparisonMode, setComparisonMode] = useState<PeriodComparisonMode>("yoy");
+  const [comparisonMetric, setComparisonMetric] = useState<"revenue" | "quantity">("revenue");
   const data = timeSeries(rows, grain, dateBasis);
+  const comparison = useMemo(
+    () => periodComparison(comparisonRows, comparisonMode, dateBasis, comparisonAnchor),
+    [comparisonRows, comparisonMode, dateBasis, comparisonAnchor]
+  );
 
   return (
     <section className="view-stack">
@@ -1865,6 +1928,61 @@ function TrendView({
           ))}
         </div>
       </div>
+      <section className="period-comparison-workbench">
+        <div className="comparison-toolbar">
+          <div>
+            <p className="eyebrow">Matched periods</p>
+            <h2>Historical comparison</h2>
+            <p className="subtle">Cumulative performance through equal elapsed-day cutoffs.</p>
+          </div>
+          <div className="comparison-controls">
+            <div className="segmented">
+              {(["yoy", "qoq", "mom"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={comparisonMode === mode ? "active" : ""}
+                  onClick={() => setComparisonMode(mode)}
+                >
+                  {comparisonModeLabel(mode)}
+                </button>
+              ))}
+            </div>
+            <div className="segmented">
+              {(["revenue", "quantity"] as const).map((metric) => (
+                <button
+                  key={metric}
+                  type="button"
+                  className={comparisonMetric === metric ? "active" : ""}
+                  onClick={() => setComparisonMetric(metric)}
+                >
+                  {metric === "revenue" ? "Revenue" : "Units"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {comparison ? (
+          <>
+            <div className="kpi-grid comparison-kpis">
+              <Kpi label={comparison.currentLabel} value={formatCurrency(comparison.currentRevenue)} />
+              <Kpi label={comparison.previousLabel} value={formatCurrency(comparison.previousRevenue)} />
+              <Kpi label="Revenue change" value={formatPercent(comparison.revenueChangePct)} />
+              <Kpi label="Current units" value={formatNumber(comparison.currentQuantity)} />
+              <Kpi label="Comparable units" value={formatNumber(comparison.previousQuantity)} />
+              <Kpi label="Unit change" value={formatPercent(comparison.quantityChangePct)} />
+            </div>
+            <ChartCard title={`${comparison.currentLabel} vs ${comparison.previousLabel}`}>
+              <PeriodComparisonChart analysis={comparison} metric={comparisonMetric} />
+            </ChartCard>
+            <p className="comparison-range-note">
+              {comparison.currentRange.start} to {comparison.currentRange.end} compared with {comparison.previousRange.start} to {comparison.previousRange.end}
+            </p>
+          </>
+        ) : (
+          <SoftEmpty text="No historical rows match the active filters." />
+        )}
+      </section>
       <ChartCard title={`${grainLabel(grain)} Revenue and Change`}>
         <ResponsiveContainer width="100%" height={360}>
           <LineChart data={data} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
@@ -2972,6 +3090,66 @@ function RevenueBar({
   );
 }
 
+function PeriodComparisonChart({
+  analysis,
+  metric
+}: {
+  analysis: PeriodComparisonAnalysis;
+  metric: "revenue" | "quantity";
+}) {
+  const currentKey = metric === "revenue" ? "currentRevenue" : "currentQuantity";
+  const previousKey = metric === "revenue" ? "previousRevenue" : "previousQuantity";
+  const formatter = (value: number) => metric === "revenue"
+    ? formatCurrency(value)
+    : formatNumber(value);
+
+  return (
+    <>
+      <div className="unit-chart-legend comparison-chart-legend" aria-hidden="true">
+        <span><i className="current" />{analysis.currentLabel}</span>
+        <span><i className="comparison" />{analysis.previousLabel}</span>
+      </div>
+      <ResponsiveContainer width="100%" height={360}>
+        <LineChart data={analysis.series} margin={{ top: 12, right: 22, bottom: 4, left: 8 }}>
+          <CartesianGrid stroke="#DDE7E1" vertical={false} />
+          <XAxis
+            dataKey="period"
+            interval={analysis.mode === "mom" ? 3 : 0}
+            tick={{ fill: "#6F7775", fontSize: 12 }}
+          />
+          <YAxis
+            tickFormatter={(value) => metric === "revenue" ? formatCompactCurrency(Number(value)) : formatNumber(Number(value))}
+            tick={{ fill: "#6F7775", fontSize: 12 }}
+          />
+          <Tooltip
+            formatter={(value, name) => [
+              formatter(Number(value)),
+              name === currentKey ? analysis.currentLabel : analysis.previousLabel
+            ]}
+          />
+          <Line
+            type="monotone"
+            dataKey={currentKey}
+            stroke="#1F4F45"
+            strokeWidth={3}
+            dot={{ r: 3 }}
+            isAnimationActive={false}
+          />
+          <Line
+            type="monotone"
+            dataKey={previousKey}
+            stroke="#C9B27E"
+            strokeWidth={3}
+            strokeDasharray="7 5"
+            dot={{ r: 3 }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </>
+  );
+}
+
 function SkuUnitsBar({
   data,
   comparisonLabel
@@ -3118,6 +3296,17 @@ function grainLabel(grain: TimeSeriesGrain) {
       : "Year-over-year";
 }
 
+function comparisonModeLabel(mode: PeriodComparisonMode) {
+  if (mode === "yoy") return "Year / Year";
+  if (mode === "qoq") return "Quarter / Quarter";
+  return "Month / Month";
+}
+
+function comparisonTone(value: number | null) {
+  if (value === null || value === 0) return "";
+  return value < 0 ? "negative" : "positive";
+}
+
 function loadStored<T>(key: string, fallback: T): T {
   try {
     const value = localStorage.getItem(key);
@@ -3149,6 +3338,15 @@ function formatShortDateTime(value: string) {
 function formatSignedCurrency(value: number) {
   if (value === 0) return formatCurrency(0);
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
+}
+
+function formatCompactCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1
+  }).format(value);
 }
 
 function formatSignedNumber(value: number) {

@@ -304,6 +304,30 @@ export type TimeSeriesGrain = "day" | "week" | "month" | "quarter" | "year";
 export type MomentumEntity = "distributor" | "state" | "hospital";
 export type MomentumMetric = "change" | "revenue";
 export type ProductClassUnitsMode = "ytd" | "month" | "mom" | "yoy";
+export type PeriodComparisonMode = "yoy" | "qoq" | "mom";
+
+export type PeriodComparisonPoint = {
+  period: string;
+  currentRevenue: number;
+  previousRevenue: number;
+  currentQuantity: number;
+  previousQuantity: number;
+};
+
+export type PeriodComparisonAnalysis = {
+  mode: PeriodComparisonMode;
+  currentLabel: string;
+  previousLabel: string;
+  currentRange: { start: string; end: string };
+  previousRange: { start: string; end: string };
+  currentRevenue: number;
+  previousRevenue: number;
+  revenueChangePct: number | null;
+  currentQuantity: number;
+  previousQuantity: number;
+  quantityChangePct: number | null;
+  series: PeriodComparisonPoint[];
+};
 
 export type ProductClassSkuUnitsRow = {
   sku: string;
@@ -425,6 +449,86 @@ export function productClassSkuUnits(
     .sort((a, b) => b.currentUnits - a.currentUnits || b.comparisonUnits - a.comparisonUnits || a.sku.localeCompare(b.sku));
 
   return { currentLabel, comparisonLabel, anchorDate, rows: analysisRows };
+}
+
+export function periodComparison(
+  rows: SalesTransaction[],
+  mode: PeriodComparisonMode,
+  dateBasis: DateBasis = "transaction",
+  anchorDate?: string
+): PeriodComparisonAnalysis | undefined {
+  const availableRange = dateRange(rows, dateBasis);
+  if (!availableRange) return undefined;
+  const anchorValue = anchorDate && anchorDate <= availableRange.end ? anchorDate : availableRange.end;
+  const anchor = parseDate(anchorValue);
+  let currentStart: Date;
+  let previousStart: Date;
+  let previousEnd: Date;
+  let currentLabel: string;
+  let previousLabel: string;
+
+  if (mode === "yoy") {
+    currentStart = new Date(Date.UTC(anchor.getUTCFullYear(), 0, 1));
+    previousStart = new Date(Date.UTC(anchor.getUTCFullYear() - 1, 0, 1));
+    previousEnd = parseDate(shiftYearClamped(anchorValue, -1));
+    currentLabel = `${anchor.getUTCFullYear()} YTD`;
+    previousLabel = `${anchor.getUTCFullYear() - 1} YTD`;
+  } else if (mode === "qoq") {
+    const quarterStartMonth = anchor.getUTCMonth() - (anchor.getUTCMonth() % 3);
+    currentStart = new Date(Date.UTC(anchor.getUTCFullYear(), quarterStartMonth, 1));
+    previousStart = new Date(Date.UTC(anchor.getUTCFullYear(), quarterStartMonth - 3, 1));
+    previousEnd = clampPeriodEnd(
+      addDays(previousStart, daysBetween(currentStart, anchor)),
+      new Date(Date.UTC(previousStart.getUTCFullYear(), previousStart.getUTCMonth() + 3, 0))
+    );
+    currentLabel = `Q${Math.floor(quarterStartMonth / 3) + 1} ${anchor.getUTCFullYear()} QTD`;
+    previousLabel = `Q${Math.floor(previousStart.getUTCMonth() / 3) + 1} ${previousStart.getUTCFullYear()} comparable`;
+  } else {
+    currentStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
+    previousStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 1, 1));
+    previousEnd = clampPeriodEnd(
+      addDays(previousStart, daysBetween(currentStart, anchor)),
+      new Date(Date.UTC(previousStart.getUTCFullYear(), previousStart.getUTCMonth() + 1, 0))
+    );
+    currentLabel = `${formatMonthLabel(anchorValue.slice(0, 7))} MTD`;
+    previousLabel = `${formatMonthLabel(isoDate(previousStart).slice(0, 7))} comparable`;
+  }
+
+  const currentRange = { start: isoDate(currentStart), end: anchorValue };
+  const previousRange = { start: isoDate(previousStart), end: isoDate(previousEnd) };
+  const currentRows = rows.filter((row) =>
+    withinRange(salesDate(row, dateBasis), currentRange.start, currentRange.end)
+  );
+  const previousRows = rows.filter((row) =>
+    withinRange(salesDate(row, dateBasis), previousRange.start, previousRange.end)
+  );
+  const currentRevenue = sum(currentRows, "revenue");
+  const previousRevenue = sum(previousRows, "revenue");
+  const currentQuantity = sum(currentRows, "quantity");
+  const previousQuantity = sum(previousRows, "quantity");
+
+  return {
+    mode,
+    currentLabel,
+    previousLabel,
+    currentRange,
+    previousRange,
+    currentRevenue,
+    previousRevenue,
+    revenueChangePct: previousRevenue ? currentRevenue / previousRevenue - 1 : null,
+    currentQuantity,
+    previousQuantity,
+    quantityChangePct: previousQuantity ? currentQuantity / previousQuantity - 1 : null,
+    series: buildComparisonSeries(
+      currentRows,
+      previousRows,
+      mode,
+      currentStart,
+      anchor,
+      previousStart,
+      dateBasis
+    )
+  };
 }
 
 export function entityMomentum(
@@ -671,6 +775,69 @@ function parseDate(dateValue: string) {
 
 function withinRange(date: string, start: string, end: string) {
   return date >= start && date <= end;
+}
+
+function daysBetween(start: Date, end: Date) {
+  return Math.floor((end.getTime() - start.getTime()) / 86400000);
+}
+
+function clampPeriodEnd(value: Date, maximum: Date) {
+  return value <= maximum ? value : maximum;
+}
+
+function buildComparisonSeries(
+  currentRows: SalesTransaction[],
+  previousRows: SalesTransaction[],
+  mode: PeriodComparisonMode,
+  currentStart: Date,
+  currentEnd: Date,
+  previousStart: Date,
+  dateBasis: DateBasis
+) {
+  const stepCount = mode === "yoy"
+    ? currentEnd.getUTCMonth() + 1
+    : mode === "qoq"
+      ? Math.floor(daysBetween(currentStart, currentEnd) / 7) + 1
+      : currentEnd.getUTCDate();
+  let currentRevenue = 0;
+  let previousRevenue = 0;
+  let currentQuantity = 0;
+  let previousQuantity = 0;
+
+  return Array.from({ length: stepCount }, (_, index) => {
+    const currentStepRows = currentRows.filter((row) =>
+      comparisonStep(salesDate(row, dateBasis), mode, currentStart) === index
+    );
+    const previousStepRows = previousRows.filter((row) =>
+      comparisonStep(salesDate(row, dateBasis), mode, previousStart) === index
+    );
+    currentRevenue += sum(currentStepRows, "revenue");
+    previousRevenue += sum(previousStepRows, "revenue");
+    currentQuantity += sum(currentStepRows, "quantity");
+    previousQuantity += sum(previousStepRows, "quantity");
+    return {
+      period: comparisonStepLabel(index, mode, currentStart),
+      currentRevenue,
+      previousRevenue,
+      currentQuantity,
+      previousQuantity
+    };
+  });
+}
+
+function comparisonStep(dateValue: string, mode: PeriodComparisonMode, periodStart: Date) {
+  const date = parseDate(dateValue);
+  if (mode === "yoy") return date.getUTCMonth();
+  const elapsedDays = daysBetween(periodStart, date);
+  return mode === "qoq" ? Math.floor(elapsedDays / 7) : elapsedDays;
+}
+
+function comparisonStepLabel(index: number, mode: PeriodComparisonMode, periodStart: Date) {
+  if (mode === "yoy") {
+    return new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" })
+      .format(new Date(Date.UTC(periodStart.getUTCFullYear(), index, 1)));
+  }
+  return mode === "qoq" ? `Week ${index + 1}` : String(index + 1);
 }
 
 function shiftMonth(month: string, amount: number) {
