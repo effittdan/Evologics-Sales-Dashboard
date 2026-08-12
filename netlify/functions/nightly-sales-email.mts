@@ -16,6 +16,7 @@ declare const Netlify: {
 
 const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const maximumAttachmentBytes = 5 * 1024 * 1024;
+const maximumMessagePages = 5;
 const automationIdentity = "microsoft-graph-automation";
 
 export default async () => {
@@ -309,7 +310,7 @@ async function requestGraphAccessToken(
   return payload.access_token as string;
 }
 
-async function listRecentMessages(
+export async function listRecentMessages(
   mailbox: string,
   accessToken: string,
   now: Date,
@@ -319,11 +320,19 @@ async function listRecentMessages(
   const params = new URLSearchParams({
     "$select": "id,internetMessageId,subject,from,sender,receivedDateTime,hasAttachments",
     "$filter": `receivedDateTime ge ${since}`,
-    "$top": "50"
+    "$orderby": "receivedDateTime desc",
+    "$top": "100"
   });
-  const url = `${graphBaseUrl}/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages?${params}`;
-  const payload = await fetchGraphJson(url, accessToken, fetchImplementation);
-  return Array.isArray(payload.value) ? (payload.value as GraphSalesMessage[]) : [];
+  let nextUrl: string | undefined = `${graphBaseUrl}/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages?${params}`;
+  const messages: GraphSalesMessage[] = [];
+
+  for (let page = 0; nextUrl && page < maximumMessagePages; page += 1) {
+    const payload = await fetchGraphJson(nextUrl, accessToken, fetchImplementation);
+    if (Array.isArray(payload.value)) messages.push(...(payload.value as GraphSalesMessage[]));
+    nextUrl = typeof payload["@odata.nextLink"] === "string" ? payload["@odata.nextLink"] : undefined;
+  }
+
+  return messages;
 }
 
 async function listMessageAttachments(
@@ -364,7 +373,7 @@ async function fetchGraphJson(
   if (!response.ok) {
     throw new Error(payload.error?.message || `Microsoft Graph request failed (${response.status}).`);
   }
-  return payload as { value?: unknown[] };
+  return payload as { value?: unknown[]; "@odata.nextLink"?: string };
 }
 
 function requiredEnvironmentVariable(name: string) {

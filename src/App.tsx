@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -113,6 +113,7 @@ import type {
 } from "./types";
 
 const chartColors = ["#1F4F45", "#4F7D6D", "#C9B27E", "#7B9C8D", "#AAB7BA"];
+const sharedLedgerRefreshIntervalMs = 5 * 60 * 1000;
 const storageKeys = {
   ledger: "evologics-import-ledger",
   reps: "evologics-sales-rep-mappings",
@@ -156,6 +157,8 @@ export function App() {
     updatedAt?: string | null;
     updatedByEmail?: string | null;
   } | null>(null);
+  const sharedLedgerVersionRef = useRef<number | null>(null);
+  const sharedLedgerSyncInFlightRef = useRef(false);
 
   const transactions = ledger.transactions;
   const quality = ledger.quality;
@@ -248,49 +251,75 @@ export function App() {
     };
   }, [netlifyIdentityEnabled, users]);
 
-  useEffect(() => {
-    if (!sharedLedgerEnabled || !currentUser) return;
+  const syncSharedLedger = useCallback(
+    async (mode: "loading" | "manual" | "background") => {
+      if (!sharedLedgerEnabled || sharedLedgerSyncInFlightRef.current) return;
+      sharedLedgerSyncInFlightRef.current = true;
+      if (mode === "loading") setSharedLedgerMessage("Loading shared sales data...");
+      if (mode === "manual") setSharedLedgerMessage("Refreshing shared sales data...");
 
-    let mounted = true;
-    setSharedLedgerMessage("Loading shared sales data...");
-    loadSharedSalesLedger()
-      .then((result) => {
-        if (!mounted) return;
-        setLedger(result.ledger);
+      try {
+        const result = await loadSharedSalesLedger();
+        const previousVersion = sharedLedgerVersionRef.current;
+        const hasNewVersion = previousVersion !== null && result.stateVersion !== previousVersion;
+        const jobs = await loadAutomatedImportHistory().catch(() => null);
+
+        if (previousVersion === null || hasNewVersion) setLedger(result.ledger);
+        if (jobs) setAutomatedImportJobs(jobs);
+        sharedLedgerVersionRef.current = result.stateVersion;
         setSharedLedgerMeta({
           stateVersion: result.stateVersion,
           updatedAt: result.updatedAt,
           updatedByEmail: result.updatedByEmail
         });
-        setSharedLedgerMessage(
-          result.updatedAt
-            ? `Shared data loaded. Last updated ${formatShortDateTime(result.updatedAt)}${
-                result.updatedByEmail ? ` by ${result.updatedByEmail}` : ""
-              }.`
-            : "Shared data loaded. No imports have been saved yet."
-        );
-      })
-      .catch((error) => {
-        if (!mounted) return;
-        setSharedLedgerMessage(
-          error instanceof Error
-            ? `${error.message} Using this browser's local sales data for now.`
-            : "Shared sales storage is not available. Using this browser's local sales data for now."
-        );
-      });
 
-    loadAutomatedImportHistory()
-      .then((jobs) => {
-        if (mounted) setAutomatedImportJobs(jobs);
-      })
-      .catch(() => {
-        if (mounted) setAutomatedImportJobs([]);
-      });
+        if (mode !== "background" || hasNewVersion) {
+          const action = mode === "loading" ? "loaded" : hasNewVersion ? "automatically synced" : "refreshed";
+          setSharedLedgerMessage(
+            result.updatedAt
+              ? `Shared data ${action}. Last updated ${formatShortDateTime(result.updatedAt)}${
+                  result.updatedByEmail ? ` by ${result.updatedByEmail}` : ""
+                }.`
+              : `Shared data ${action}. No imports have been saved yet.`
+          );
+        }
+      } catch (error) {
+        if (mode !== "background") {
+          setSharedLedgerMessage(
+            error instanceof Error
+              ? `${error.message} Using this browser's local sales data for now.`
+              : "Shared sales storage is not available. Using this browser's local sales data for now."
+          );
+        }
+      } finally {
+        sharedLedgerSyncInFlightRef.current = false;
+      }
+    },
+    [sharedLedgerEnabled]
+  );
+
+  useEffect(() => {
+    if (!sharedLedgerEnabled || !currentUser) return;
+    void syncSharedLedger("loading");
+  }, [currentUser, sharedLedgerEnabled, syncSharedLedger]);
+
+  useEffect(() => {
+    if (!sharedLedgerEnabled || !currentUser) return;
+
+    const syncInBackground = () => void syncSharedLedger("background");
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") syncInBackground();
+    };
+    const intervalId = window.setInterval(syncInBackground, sharedLedgerRefreshIntervalMs);
+    window.addEventListener("focus", syncInBackground);
+    document.addEventListener("visibilitychange", syncWhenVisible);
 
     return () => {
-      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", syncInBackground);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
     };
-  }, [currentUser, sharedLedgerEnabled]);
+  }, [currentUser, sharedLedgerEnabled, syncSharedLedger]);
 
   const enriched = useMemo(
     () => applyEnrichments(transactions, repMappings, skuEnrichments),
@@ -390,30 +419,7 @@ export function App() {
   }
 
   async function refreshSharedLedger() {
-    if (!sharedLedgerEnabled) return;
-    setSharedLedgerMessage("Refreshing shared sales data...");
-    try {
-      const result = await loadSharedSalesLedger();
-      const jobs = await loadAutomatedImportHistory().catch(() => automatedImportJobs);
-      setLedger(result.ledger);
-      setAutomatedImportJobs(jobs);
-      setSharedLedgerMeta({
-        stateVersion: result.stateVersion,
-        updatedAt: result.updatedAt,
-        updatedByEmail: result.updatedByEmail
-      });
-      setSharedLedgerMessage(
-        result.updatedAt
-          ? `Shared data refreshed. Last updated ${formatShortDateTime(result.updatedAt)}${
-              result.updatedByEmail ? ` by ${result.updatedByEmail}` : ""
-            }.`
-          : "Shared data refreshed. No imports have been saved yet."
-      );
-    } catch (error) {
-      setSharedLedgerMessage(
-        error instanceof Error ? error.message : "Shared sales storage is not available."
-      );
-    }
+    await syncSharedLedger("manual");
   }
 
   async function saveSharedLedgerIfEnabled(nextLedger: ImportLedger) {
@@ -430,6 +436,7 @@ export function App() {
         updatedAt: result.updatedAt,
         updatedByEmail: result.updatedByEmail
       });
+      sharedLedgerVersionRef.current = result.stateVersion;
       setSharedLedgerMessage(
         result.updatedAt
           ? `Shared data saved. Last updated ${formatShortDateTime(result.updatedAt)}${
