@@ -187,6 +187,24 @@ describe("period comparisons", () => {
     expect(quarter?.currentRange).toEqual({ start: "2026-01-01", end: "2026-02-10" });
     expect(quarter?.previousRange).toEqual({ start: "2025-10-01", end: "2025-11-10" });
   });
+
+  it("compares month and quarter with the same prior-year periods when selected", () => {
+    const month = periodComparison(comparisonRows, "mom", "transaction", "2026-02-10", "previous-year");
+    const quarter = periodComparison(comparisonRows, "qoq", "transaction", "2026-02-10", "previous-year");
+
+    expect(month).toMatchObject({
+      basis: "previous-year",
+      previousLabel: "Feb 2025 comparable",
+      previousRange: { start: "2025-02-01", end: "2025-02-10" },
+      previousRevenue: 200
+    });
+    expect(quarter).toMatchObject({
+      basis: "previous-year",
+      previousLabel: "Q1 2025 comparable",
+      previousRange: { start: "2025-01-01", end: "2025-02-10" },
+      previousRevenue: 300
+    });
+  });
 });
 
 describe("dashboard filters", () => {

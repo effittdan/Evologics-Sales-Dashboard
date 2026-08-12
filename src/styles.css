@@ -682,18 +682,49 @@ select[multiple] {
   font-weight: 600;
 }
 
-.comparison-card h3 {
-  margin: 14px 0 3px;
+.comparison-period-values {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.comparison-period-values > div {
+  display: grid;
+  gap: 3px;
+}
+
+.comparison-period-values span,
+.comparison-total-row span,
+.comparison-change-panel span {
+  color: var(--muted);
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.comparison-period-values strong {
   color: var(--primary);
   font-size: 24px;
   line-height: 1.1;
   font-weight: 600;
 }
 
-.comparison-card > p {
-  margin: 0;
+.comparison-period-values small,
+.comparison-total-row small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+}
+
+.comparison-period-values .comparison-previous-value {
+  padding-top: 10px;
+  border-top: 1px solid #e8efeb;
+}
+
+.comparison-previous-value strong {
+  color: #4f5a57;
+  font-size: 20px;
 }
 
 .comparison-card dl {
@@ -735,8 +766,104 @@ select[multiple] {
   justify-content: flex-end;
 }
 
-.comparison-kpis {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.comparison-basis-control {
+  display: grid;
+  gap: 7px;
+  min-width: 360px;
+}
+
+.comparison-basis-control > span {
+  color: var(--muted);
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.comparison-basis-control .segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.comparison-basis-control.compact {
+  min-width: 340px;
+}
+
+.comparison-basis-control .segmented button {
+  min-width: 0;
+  white-space: normal;
+}
+
+.comparison-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 12px;
+}
+
+.comparison-total-panel,
+.comparison-change-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.comparison-total-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(110px, auto);
+  align-items: center;
+  gap: 18px;
+  padding: 15px 17px;
+}
+
+.comparison-total-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.comparison-total-row strong {
+  color: var(--primary);
+  font-size: 22px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.comparison-total-row em {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+  text-align: right;
+}
+
+.comparison-total-row-previous {
+  border-top: 1px solid #e8efeb;
+  background: #f8fbf9;
+}
+
+.comparison-total-row-previous strong {
+  color: #4f5a57;
+}
+
+.comparison-change-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.comparison-change-panel > div {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 15px;
+}
+
+.comparison-change-panel > div + div {
+  border-left: 1px solid #e8efeb;
+}
+
+.comparison-change-panel strong {
+  font-size: 22px;
+  font-weight: 600;
 }
 
 .comparison-range-note {
@@ -1316,9 +1443,23 @@ select[multiple] {
   .product-class-controls,
   .product-class-summary,
   .comparison-card-grid,
-  .comparison-kpis {
+  .comparison-detail-grid {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .comparison-total-row {
+    grid-template-columns: 1fr auto;
+    gap: 8px 14px;
+  }
+
+  .comparison-total-row strong {
+    align-self: end;
+  }
+
+  .comparison-total-row em {
+    grid-column: 1 / -1;
+    text-align: left;
   }
 
   .comparison-toolbar,
@@ -1331,6 +1472,17 @@ select[multiple] {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
+  }
+
+  .comparison-basis-control,
+  .comparison-basis-control.compact {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .comparison-controls .comparison-basis-control .segmented,
+  .comparison-basis-control .segmented {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .comparison-range-note {
@@ -1481,8 +1633,12 @@ select[multiple] {
     box-shadow: none;
   }
 
-  .comparison-card h3 {
+  .comparison-period-values strong {
     font-size: 18px;
+  }
+
+  .comparison-previous-value strong {
+    font-size: 16px;
   }
 
   body.print-product-class-only .product-class-unit-report {

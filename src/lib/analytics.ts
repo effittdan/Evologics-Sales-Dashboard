@@ -305,6 +305,7 @@ export type MomentumEntity = "distributor" | "state" | "hospital";
 export type MomentumMetric = "change" | "revenue";
 export type ProductClassUnitsMode = "ytd" | "month" | "mom" | "yoy";
 export type PeriodComparisonMode = "yoy" | "qoq" | "mom";
+export type PeriodComparisonBasis = "previous-period" | "previous-year";
 
 export type PeriodComparisonPoint = {
   period: string;
@@ -316,6 +317,7 @@ export type PeriodComparisonPoint = {
 
 export type PeriodComparisonAnalysis = {
   mode: PeriodComparisonMode;
+  basis: PeriodComparisonBasis;
   currentLabel: string;
   previousLabel: string;
   currentRange: { start: string; end: string };
@@ -455,7 +457,8 @@ export function periodComparison(
   rows: SalesTransaction[],
   mode: PeriodComparisonMode,
   dateBasis: DateBasis = "transaction",
-  anchorDate?: string
+  anchorDate?: string,
+  basis: PeriodComparisonBasis = "previous-period"
 ): PeriodComparisonAnalysis | undefined {
   const availableRange = dateRange(rows, dateBasis);
   if (!availableRange) return undefined;
@@ -476,7 +479,9 @@ export function periodComparison(
   } else if (mode === "qoq") {
     const quarterStartMonth = anchor.getUTCMonth() - (anchor.getUTCMonth() % 3);
     currentStart = new Date(Date.UTC(anchor.getUTCFullYear(), quarterStartMonth, 1));
-    previousStart = new Date(Date.UTC(anchor.getUTCFullYear(), quarterStartMonth - 3, 1));
+    previousStart = basis === "previous-year"
+      ? new Date(Date.UTC(anchor.getUTCFullYear() - 1, quarterStartMonth, 1))
+      : new Date(Date.UTC(anchor.getUTCFullYear(), quarterStartMonth - 3, 1));
     previousEnd = clampPeriodEnd(
       addDays(previousStart, daysBetween(currentStart, anchor)),
       new Date(Date.UTC(previousStart.getUTCFullYear(), previousStart.getUTCMonth() + 3, 0))
@@ -485,7 +490,9 @@ export function periodComparison(
     previousLabel = `Q${Math.floor(previousStart.getUTCMonth() / 3) + 1} ${previousStart.getUTCFullYear()} comparable`;
   } else {
     currentStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
-    previousStart = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 1, 1));
+    previousStart = basis === "previous-year"
+      ? new Date(Date.UTC(anchor.getUTCFullYear() - 1, anchor.getUTCMonth(), 1))
+      : new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 1, 1));
     previousEnd = clampPeriodEnd(
       addDays(previousStart, daysBetween(currentStart, anchor)),
       new Date(Date.UTC(previousStart.getUTCFullYear(), previousStart.getUTCMonth() + 1, 0))
@@ -509,6 +516,7 @@ export function periodComparison(
 
   return {
     mode,
+    basis: mode === "yoy" ? "previous-year" : basis,
     currentLabel,
     previousLabel,
     currentRange,

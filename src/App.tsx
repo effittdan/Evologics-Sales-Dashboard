@@ -69,6 +69,7 @@ import {
   type MomentumMetric,
   type MomentumRow,
   type PeriodComparisonAnalysis,
+  type PeriodComparisonBasis,
   type PeriodComparisonMode,
   type ProductClassUnitsMode,
   type ProductClassSkuUnitsRow,
@@ -1601,6 +1602,7 @@ function Overview({
   const [selectedProductClass, setSelectedProductClass] = useState(filters.productClass[0] ?? "");
   const [unitMode, setUnitMode] = useState<ProductClassUnitsMode>("ytd");
   const [selectedMonth, setSelectedMonth] = useState("");
+  const [comparisonBasis, setComparisonBasis] = useState<PeriodComparisonBasis>("previous-period");
   const monthly = timeSeries(rows, "month", dateBasis);
   const quarterly = timeSeries(rows, "quarter", dateBasis);
   const topReps = topByRevenue(rows, "salesRepVendor", 10);
@@ -1611,9 +1613,9 @@ function Overview({
   const filterSummary = overviewFilterSummary(filters);
   const periodComparisons = useMemo(
     () => (["yoy", "qoq", "mom"] as const)
-      .map((mode) => periodComparison(comparisonRows, mode, dateBasis, comparisonAnchor))
+      .map((mode) => periodComparison(comparisonRows, mode, dateBasis, comparisonAnchor, comparisonBasis))
       .filter((analysis): analysis is PeriodComparisonAnalysis => Boolean(analysis)),
-    [comparisonRows, dateBasis, comparisonAnchor]
+    [comparisonRows, dateBasis, comparisonAnchor, comparisonBasis]
   );
   const selectedClassRows = useMemo(
     () => productRows.filter((row) => productFamily(row) === selectedProductClass),
@@ -1722,8 +1724,11 @@ function Overview({
           <div>
             <p className="eyebrow">Historical performance</p>
             <h2>Period comparisons</h2>
-            <p className="subtle">Revenue and units through matching elapsed-day cutoffs.</p>
+            <p className="subtle">
+              Revenue and units through matching elapsed-day cutoffs. Quarter and month comparisons use the {comparisonBasis === "previous-year" ? "same period last year" : "previous period"}.
+            </p>
           </div>
+          <ComparisonBasisControl value={comparisonBasis} onChange={setComparisonBasis} />
         </div>
         <div className="comparison-card-grid">
           {periodComparisons.map((analysis) => (
@@ -1734,11 +1739,21 @@ function Overview({
                   {formatPercent(analysis.revenueChangePct)}
                 </strong>
               </div>
-              <h3>{formatCurrency(analysis.currentRevenue)}</h3>
-              <p>{analysis.currentLabel}</p>
+              <div className="comparison-period-values">
+                <div>
+                  <span>{analysis.currentLabel}</span>
+                  <strong>{formatCurrency(analysis.currentRevenue)}</strong>
+                  <small>{formatComparisonRange(analysis.currentRange)}</small>
+                </div>
+                <div className="comparison-previous-value">
+                  <span>{analysis.previousLabel}</span>
+                  <strong>{formatCurrency(analysis.previousRevenue)}</strong>
+                  <small>{formatComparisonRange(analysis.previousRange)}</small>
+                </div>
+              </div>
               <dl>
-                <div><dt>Comparable</dt><dd>{formatCurrency(analysis.previousRevenue)}</dd></div>
-                <div><dt>Units</dt><dd>{formatNumber(analysis.currentQuantity)} vs {formatNumber(analysis.previousQuantity)}</dd></div>
+                <div><dt>Current units</dt><dd>{formatNumber(analysis.currentQuantity)}</dd></div>
+                <div><dt>Previous units</dt><dd>{formatNumber(analysis.previousQuantity)}</dd></div>
               </dl>
             </article>
           ))}
@@ -1906,11 +1921,12 @@ function TrendView({
   comparisonAnchor?: string;
 }) {
   const [comparisonMode, setComparisonMode] = useState<PeriodComparisonMode>("yoy");
+  const [comparisonBasis, setComparisonBasis] = useState<PeriodComparisonBasis>("previous-period");
   const [comparisonMetric, setComparisonMetric] = useState<"revenue" | "quantity">("revenue");
   const data = timeSeries(rows, grain, dateBasis);
   const comparison = useMemo(
-    () => periodComparison(comparisonRows, comparisonMode, dateBasis, comparisonAnchor),
-    [comparisonRows, comparisonMode, dateBasis, comparisonAnchor]
+    () => periodComparison(comparisonRows, comparisonMode, dateBasis, comparisonAnchor, comparisonBasis),
+    [comparisonRows, comparisonMode, dateBasis, comparisonAnchor, comparisonBasis]
   );
 
   return (
@@ -1948,6 +1964,9 @@ function TrendView({
                 </button>
               ))}
             </div>
+            {comparisonMode !== "yoy" ? (
+              <ComparisonBasisControl value={comparisonBasis} onChange={setComparisonBasis} compact />
+            ) : null}
             <div className="segmented">
               {(["revenue", "quantity"] as const).map((metric) => (
                 <button
@@ -1964,13 +1983,35 @@ function TrendView({
         </div>
         {comparison ? (
           <>
-            <div className="kpi-grid comparison-kpis">
-              <Kpi label={comparison.currentLabel} value={formatCurrency(comparison.currentRevenue)} />
-              <Kpi label={comparison.previousLabel} value={formatCurrency(comparison.previousRevenue)} />
-              <Kpi label="Revenue change" value={formatPercent(comparison.revenueChangePct)} />
-              <Kpi label="Current units" value={formatNumber(comparison.currentQuantity)} />
-              <Kpi label="Comparable units" value={formatNumber(comparison.previousQuantity)} />
-              <Kpi label="Unit change" value={formatPercent(comparison.quantityChangePct)} />
+            <div className="comparison-detail-grid">
+              <div className="comparison-total-panel">
+                <div className="comparison-total-row">
+                  <div>
+                    <span>{comparison.currentLabel}</span>
+                    <small>{formatComparisonRange(comparison.currentRange)}</small>
+                  </div>
+                  <strong>{formatCurrency(comparison.currentRevenue)}</strong>
+                  <em>{formatNumber(comparison.currentQuantity)} {comparison.currentQuantity === 1 ? "unit" : "units"}</em>
+                </div>
+                <div className="comparison-total-row comparison-total-row-previous">
+                  <div>
+                    <span>{comparison.previousLabel}</span>
+                    <small>{formatComparisonRange(comparison.previousRange)}</small>
+                  </div>
+                  <strong>{formatCurrency(comparison.previousRevenue)}</strong>
+                  <em>{formatNumber(comparison.previousQuantity)} {comparison.previousQuantity === 1 ? "unit" : "units"}</em>
+                </div>
+              </div>
+              <div className="comparison-change-panel">
+                <div>
+                  <span>Revenue change</span>
+                  <strong className={comparisonTone(comparison.revenueChangePct)}>{formatPercent(comparison.revenueChangePct)}</strong>
+                </div>
+                <div>
+                  <span>Unit change</span>
+                  <strong className={comparisonTone(comparison.quantityChangePct)}>{formatPercent(comparison.quantityChangePct)}</strong>
+                </div>
+              </div>
             </div>
             <ChartCard title={`${comparison.currentLabel} vs ${comparison.previousLabel}`}>
               <PeriodComparisonChart analysis={comparison} metric={comparisonMetric} />
@@ -3150,6 +3191,38 @@ function PeriodComparisonChart({
   );
 }
 
+function ComparisonBasisControl({
+  value,
+  onChange,
+  compact = false
+}: {
+  value: PeriodComparisonBasis;
+  onChange: (basis: PeriodComparisonBasis) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`comparison-basis-control${compact ? " compact" : ""} no-print`}>
+      {!compact ? <span>Quarter and month basis</span> : null}
+      <div className="segmented" aria-label="Quarter and month comparison basis">
+        <button
+          type="button"
+          className={value === "previous-period" ? "active" : ""}
+          onClick={() => onChange("previous-period")}
+        >
+          Previous period
+        </button>
+        <button
+          type="button"
+          className={value === "previous-year" ? "active" : ""}
+          onClick={() => onChange("previous-year")}
+        >
+          Same period last year
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SkuUnitsBar({
   data,
   comparisonLabel
@@ -3333,6 +3406,23 @@ function formatShortDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatComparisonRange(range: { start: string; end: string }) {
+  const start = new Date(`${range.start}T00:00:00Z`);
+  const end = new Date(`${range.end}T00:00:00Z`);
+  const startLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC"
+  }).format(start);
+  const endLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(end);
+  return `${startLabel} to ${endLabel}`;
 }
 
 function formatSignedCurrency(value: number) {
