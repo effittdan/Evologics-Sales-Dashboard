@@ -40,7 +40,7 @@ import {
   customerPerformance,
   dateRange,
   emptyFilters,
-  entityMomentum,
+  entityPeriodComparison,
   formatCurrency,
   formatNumber,
   formatPercent,
@@ -53,8 +53,8 @@ import {
   productPerformance,
   productFamily,
   productFamilyOptions,
-  rankMomentumRows,
-  rankMomentumRowsByVolume,
+  rankEntityPeriodRows,
+  rankEntityPeriodRowsByVolume,
   repPerformance,
   resolveDateRange,
   salesDate,
@@ -65,9 +65,10 @@ import {
   withoutShippingStateFilter,
   type DashboardFilters,
   type DateBasis,
+  type EntityPeriodComparisonRow,
   type MomentumEntity,
+  type MomentumMeasure,
   type MomentumMetric,
-  type MomentumRow,
   type PeriodComparisonAnalysis,
   type PeriodComparisonBasis,
   type PeriodComparisonMode,
@@ -796,9 +797,10 @@ export function App() {
             )}
             {activeView === "momentum" && (
               <GrowthRiskView
-                rows={filtered}
+                comparisonRows={comparisonRows}
                 distributorDetailRows={filteredWithoutState}
                 dateBasis={filters.dateBasis}
+                comparisonAnchor={filteredRange?.end}
               />
             )}
             {activeView === "map" && (
@@ -2484,26 +2486,60 @@ function CustomerGeoView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBa
 }
 
 function GrowthRiskView({
-  rows,
+  comparisonRows,
   distributorDetailRows,
-  dateBasis
+  dateBasis,
+  comparisonAnchor
 }: {
-  rows: SalesTransaction[];
+  comparisonRows: SalesTransaction[];
   distributorDetailRows: SalesTransaction[];
   dateBasis: DateBasis;
+  comparisonAnchor?: string;
 }) {
   const [entity, setEntity] = useState<MomentumEntity>("distributor");
   const [metric, setMetric] = useState<MomentumMetric>("change");
+  const [measure, setMeasure] = useState<MomentumMeasure>("revenue");
+  const [comparisonMode, setComparisonMode] = useState<PeriodComparisonMode>("yoy");
+  const [comparisonBasis, setComparisonBasis] = useState<PeriodComparisonBasis>("previous-period");
   const [selectedDistributor, setSelectedDistributor] = useState<string | null>(null);
-  const analysis = useMemo(() => entityMomentum(rows, entity, dateBasis), [rows, entity, dateBasis]);
-  const topRows = rankMomentumRows(analysis?.rows ?? [], metric, "top");
-  const bottomRows = rankMomentumRows(analysis?.rows ?? [], metric, "bottom");
-  const volumeRows = rankMomentumRowsByVolume(analysis?.rows ?? []);
-  const currentRevenue = analysis?.rows.reduce((total, row) => total + row.currentRevenue, 0) ?? 0;
-  const previousRevenue = analysis?.rows.reduce((total, row) => total + row.previousRevenue, 0) ?? 0;
-  const growingCount = analysis?.rows.filter((row) => row.changeRevenue > 0).length ?? 0;
-  const decliningCount = analysis?.rows.filter((row) => row.changeRevenue < 0).length ?? 0;
+  const analysis = useMemo(
+    () => entityPeriodComparison(
+      comparisonRows,
+      entity,
+      comparisonMode,
+      dateBasis,
+      comparisonAnchor,
+      comparisonBasis
+    ),
+    [comparisonRows, entity, comparisonMode, dateBasis, comparisonAnchor, comparisonBasis]
+  );
+  const comparisonChange = (row: EntityPeriodComparisonRow) =>
+    measure === "revenue" ? row.changeRevenue : row.changeQuantity;
+  const topCandidates = metric === "change"
+    ? (analysis?.rows ?? []).filter((row) => comparisonChange(row) > 0)
+    : analysis?.rows ?? [];
+  const bottomCandidates = metric === "change"
+    ? (analysis?.rows ?? []).filter((row) => comparisonChange(row) < 0)
+    : analysis?.rows ?? [];
+  const topRows = rankEntityPeriodRows(topCandidates, measure, metric, "top");
+  const bottomRows = rankEntityPeriodRows(bottomCandidates, measure, metric, "bottom");
+  const volumeRows = rankEntityPeriodRowsByVolume(analysis?.rows ?? [], measure);
+  const currentTotal = analysis?.rows.reduce(
+    (total, row) => total + (measure === "revenue" ? row.currentRevenue : row.currentQuantity),
+    0
+  ) ?? 0;
+  const previousTotal = analysis?.rows.reduce(
+    (total, row) => total + (measure === "revenue" ? row.previousRevenue : row.previousQuantity),
+    0
+  ) ?? 0;
+  const growingCount = analysis?.rows.filter(
+    (row) => (measure === "revenue" ? row.changeRevenue : row.changeQuantity) > 0
+  ).length ?? 0;
+  const decliningCount = analysis?.rows.filter(
+    (row) => (measure === "revenue" ? row.changeRevenue : row.changeQuantity) < 0
+  ).length ?? 0;
   const entityLabel = entity === "distributor" ? "Distributors" : entity === "state" ? "States" : "Hospitals";
+  const measureLabel = measure === "revenue" ? "Revenue" : "Units";
   const selectedRows = selectedDistributor
     ? distributorDetailRows.filter(
         (row) => isDistributorCategory(row.salesCategory) && row.customerName === selectedDistributor
@@ -2525,15 +2561,18 @@ function GrowthRiskView({
     <section className="view-stack">
       <div className="section-header momentum-header">
         <div>
-          <p className="eyebrow">Completed-week comparison</p>
+          <p className="eyebrow">Matched-period performance</p>
           <h2>Growth & Risk</h2>
           {analysis ? (
             <p className="subtle">
-              Current {analysis.currentRange.start} to {analysis.currentRange.end} compared with {analysis.previousRange.start} to {analysis.previousRange.end}
+              {analysis.currentLabel} ({formatComparisonRange(analysis.currentRange)}) compared with {analysis.previousLabel} ({formatComparisonRange(analysis.previousRange)})
             </p>
           ) : null}
         </div>
-        <div className="momentum-controls">
+      </div>
+      <div className="momentum-control-bar">
+        <div className="momentum-control-group">
+          <span>Entity</span>
           <div className="segmented" aria-label="Entity type">
             {(["distributor", "state", "hospital"] as const).map((item) => (
               <button
@@ -2548,10 +2587,43 @@ function GrowthRiskView({
               </button>
             ))}
           </div>
+        </div>
+        <div className="momentum-control-group">
+          <span>Period</span>
+          <div className="segmented" aria-label="Comparison period">
+            {(["yoy", "qoq", "mom"] as const).map((mode) => (
+              <button
+                key={mode}
+                className={comparisonMode === mode ? "active" : ""}
+                onClick={() => setComparisonMode(mode)}
+              >
+                {comparisonModeLabel(mode)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {comparisonMode !== "yoy" ? (
+          <div className="momentum-control-group momentum-basis-group">
+            <span>Basis</span>
+            <ComparisonBasisControl value={comparisonBasis} onChange={setComparisonBasis} compact />
+          </div>
+        ) : null}
+        <div className="momentum-control-group">
+          <span>Measure</span>
+          <div className="segmented" aria-label="Performance measure">
+            {(["revenue", "quantity"] as const).map((item) => (
+              <button key={item} className={measure === item ? "active" : ""} onClick={() => setMeasure(item)}>
+                {item === "revenue" ? "Revenue" : "Units"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="momentum-control-group">
+          <span>Rank by</span>
           <div className="segmented" aria-label="Ranking metric">
             {(["change", "revenue"] as const).map((item) => (
               <button key={item} className={metric === item ? "active" : ""} onClick={() => setMetric(item)}>
-                {item === "change" ? "Growth / loss" : "Sales"}
+                {item === "change" ? "Growth / loss" : "Current period"}
               </button>
             ))}
           </div>
@@ -2559,32 +2631,49 @@ function GrowthRiskView({
       </div>
 
       {!analysis || !analysis.rows.length ? (
-        <SoftEmpty text={`No ${entityLabel.toLowerCase()} have sales in the latest eight completed weeks under the current filters.`} />
+        <SoftEmpty text={`No ${entityLabel.toLowerCase()} have sales in either matched period under the current filters.`} />
       ) : (
         <>
           <div className="kpi-grid compact momentum-kpis">
-            <Kpi label="Current 4-week sales" value={formatCurrency(currentRevenue)} />
-            <Kpi label="Prior 4-week sales" value={formatCurrency(previousRevenue)} />
+            <Kpi
+              label={analysis.currentLabel}
+              value={measure === "revenue" ? formatCurrency(currentTotal) : formatNumber(currentTotal)}
+            />
+            <Kpi
+              label={analysis.previousLabel}
+              value={measure === "revenue" ? formatCurrency(previousTotal) : formatNumber(previousTotal)}
+            />
             <Kpi label="Growing" value={growingCount.toLocaleString()} />
             <Kpi label="Declining" value={decliningCount.toLocaleString()} />
           </div>
           <div className="momentum-tables">
             <MomentumTable
-              title={metric === "change" ? `Top 20 Growing ${entityLabel}` : `Top 20 ${entityLabel} by Sales`}
+              title={metric === "change" ? `Top 20 Growing ${entityLabel}` : `Top 20 ${entityLabel} by ${measureLabel}`}
               rows={topRows}
               tone="positive"
+              measure={measure}
+              currentLabel={analysis.currentLabel}
+              previousLabel={analysis.previousLabel}
+              emptyText={`No growing ${entityLabel.toLowerCase()} in this comparison.`}
               onSelectName={entity === "distributor" ? setSelectedDistributor : undefined}
             />
             <MomentumTable
-              title={metric === "change" ? `Bottom 20 Declining ${entityLabel}` : `Bottom 20 ${entityLabel} by Sales`}
+              title={metric === "change" ? `Bottom 20 Declining ${entityLabel}` : `Bottom 20 ${entityLabel} by ${measureLabel}`}
               rows={bottomRows}
               tone="negative"
+              measure={measure}
+              currentLabel={analysis.currentLabel}
+              previousLabel={analysis.previousLabel}
+              emptyText={`No declining ${entityLabel.toLowerCase()} in this comparison.`}
               onSelectName={entity === "distributor" ? setSelectedDistributor : undefined}
             />
             <MomentumTable
-              title={`Top 50 ${entityLabel} by 8-Week Sales Volume`}
+              title={`Top 50 ${entityLabel} by Matched-Period ${measureLabel} Volume`}
               rows={volumeRows}
               tone="positive"
+              measure={measure}
+              currentLabel={analysis.currentLabel}
+              previousLabel={analysis.previousLabel}
               showChangePercent={false}
               onSelectName={entity === "distributor" ? setSelectedDistributor : undefined}
             />
@@ -2599,32 +2688,49 @@ function MomentumTable({
   title,
   rows,
   tone,
+  measure,
+  currentLabel,
+  previousLabel,
+  emptyText,
   showChangePercent = true,
   onSelectName
 }: {
   title: string;
-  rows: MomentumRow[];
+  rows: EntityPeriodComparisonRow[];
   tone: "positive" | "negative";
+  measure: MomentumMeasure;
+  currentLabel: string;
+  previousLabel: string;
+  emptyText?: string;
   showChangePercent?: boolean;
   onSelectName?: (name: string) => void;
 }) {
   return (
     <div className="table-card momentum-table">
       <h2>{title}</h2>
+      {!rows.length ? (
+        <SoftEmpty text={emptyText ?? "No entities match this ranking."} />
+      ) : (
       <table>
         <thead>
           <tr>
             <th>Rank</th>
             <th>Name</th>
-            <th>8-week trend</th>
-            <th>Current</th>
-            <th>Prior</th>
+            <th>Matched trend</th>
+            <th>{currentLabel}</th>
+            <th>{previousLabel}</th>
             <th>Change</th>
             {showChangePercent ? <th>Change %</th> : null}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, index) => (
+          {rows.map((row, index) => {
+            const current = measure === "revenue" ? row.currentRevenue : row.currentQuantity;
+            const previous = measure === "revenue" ? row.previousRevenue : row.previousQuantity;
+            const change = measure === "revenue" ? row.changeRevenue : row.changeQuantity;
+            const changePct = measure === "revenue" ? row.revenueChangePct : row.quantityChangePct;
+            const formatValue = measure === "revenue" ? formatCurrency : formatNumber;
+            return (
             <tr key={row.name}>
               <td>{index + 1}</td>
               <td className="momentum-name">
@@ -2634,21 +2740,23 @@ function MomentumTable({
                   </button>
                 ) : row.name}
               </td>
-              <td><MomentumSparkline row={row} tone={tone} /></td>
-              <td>{formatCurrency(row.currentRevenue)}</td>
-              <td>{formatCurrency(row.previousRevenue)}</td>
-              <td className={row.changeRevenue < 0 ? "negative" : "positive"}>
-                {formatSignedCurrency(row.changeRevenue)}
+              <td><MomentumSparkline row={row} tone={tone} measure={measure} /></td>
+              <td>{formatValue(current)}</td>
+              <td>{formatValue(previous)}</td>
+              <td className={change < 0 ? "negative" : "positive"}>
+                {measure === "revenue" ? formatSignedCurrency(change) : formatSignedNumber(change)}
               </td>
               {showChangePercent ? (
-                <td className={row.changeRevenue < 0 ? "negative" : "positive"}>
-                  {row.previousRevenue === 0 && row.currentRevenue !== 0 ? "New" : formatPercent(row.changePct)}
+                <td className={change < 0 ? "negative" : "positive"}>
+                  {previous === 0 && current !== 0 ? "New" : formatPercent(changePct)}
                 </td>
               ) : null}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
@@ -2783,17 +2891,39 @@ function isDistributorCategory(category?: string) {
   return category?.replace(/\s+/g, "").toLowerCase() === "distributor";
 }
 
-function MomentumSparkline({ row, tone }: { row: MomentumRow; tone: "positive" | "negative" }) {
-  const stroke = row.changeRevenue < 0 ? "#A63F3F" : tone === "positive" ? "#1F4F45" : "#8A6B1F";
+function MomentumSparkline({
+  row,
+  tone,
+  measure
+}: {
+  row: EntityPeriodComparisonRow;
+  tone: "positive" | "negative";
+  measure: MomentumMeasure;
+}) {
+  const change = measure === "revenue" ? row.changeRevenue : row.changeQuantity;
+  const currentKey = measure === "revenue" ? "currentRevenue" : "currentQuantity";
+  const previousKey = measure === "revenue" ? "previousRevenue" : "previousQuantity";
+  const stroke = change < 0 ? "#A63F3F" : tone === "positive" ? "#1F4F45" : "#8A6B1F";
   return (
-    <div className="momentum-sparkline" aria-label={`${row.name} eight-week sales trend`}>
+    <div className="momentum-sparkline" aria-label={`${row.name} matched-period ${measure} trend`}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={row.trend} margin={{ top: 4, right: 2, bottom: 4, left: 2 }}>
           <Tooltip
-            labelFormatter={(value) => `Week of ${value}`}
-            formatter={(value) => [formatCurrency(Number(value)), "Sales"]}
+            formatter={(value, name) => [
+              measure === "revenue" ? formatCurrency(Number(value)) : formatNumber(Number(value)),
+              name === currentKey ? "Current" : "Comparable"
+            ]}
           />
-          <Line type="monotone" dataKey="revenue" stroke={stroke} strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey={currentKey} stroke={stroke} strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line
+            type="monotone"
+            dataKey={previousKey}
+            stroke="#C9B27E"
+            strokeWidth={2}
+            strokeDasharray="4 3"
+            dot={false}
+            isAnimationActive={false}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -307,6 +307,7 @@ export function kpis(rows: SalesTransaction[]) {
 export type TimeSeriesGrain = "day" | "week" | "month" | "quarter" | "year";
 export type MomentumEntity = "distributor" | "state" | "hospital";
 export type MomentumMetric = "change" | "revenue";
+export type MomentumMeasure = "revenue" | "quantity";
 export type ProductClassUnitsMode = "ytd" | "month" | "mom" | "yoy";
 export type PeriodComparisonMode = "yoy" | "qoq" | "mom";
 export type PeriodComparisonBasis = "previous-period" | "previous-year";
@@ -364,6 +365,26 @@ export type MomentumAnalysis = {
   currentRange: { start: string; end: string };
   previousRange: { start: string; end: string };
   rows: MomentumRow[];
+};
+
+export type EntityPeriodComparisonRow = {
+  name: string;
+  currentRevenue: number;
+  previousRevenue: number;
+  changeRevenue: number;
+  revenueChangePct: number | null;
+  currentQuantity: number;
+  previousQuantity: number;
+  changeQuantity: number;
+  quantityChangePct: number | null;
+  trend: PeriodComparisonPoint[];
+};
+
+export type EntityPeriodComparisonAnalysis = Pick<
+  PeriodComparisonAnalysis,
+  "mode" | "basis" | "currentLabel" | "previousLabel" | "currentRange" | "previousRange"
+> & {
+  rows: EntityPeriodComparisonRow[];
 };
 
 export function timeSeries(
@@ -541,6 +562,104 @@ export function periodComparison(
       dateBasis
     )
   };
+}
+
+export function entityPeriodComparison(
+  rows: SalesTransaction[],
+  entity: MomentumEntity,
+  mode: PeriodComparisonMode,
+  dateBasis: DateBasis = "transaction",
+  anchorDate?: string,
+  basis: PeriodComparisonBasis = "previous-period"
+): EntityPeriodComparisonAnalysis | undefined {
+  const comparison = periodComparison(rows, mode, dateBasis, anchorDate, basis);
+  if (!comparison) return undefined;
+
+  const currentStart = parseDate(comparison.currentRange.start);
+  const currentEnd = parseDate(comparison.currentRange.end);
+  const previousStart = parseDate(comparison.previousRange.start);
+  const grouped = new Map<string, SalesTransaction[]>();
+
+  rows.forEach((row) => {
+    const date = salesDate(row, dateBasis);
+    const inCurrent = withinRange(date, comparison.currentRange.start, comparison.currentRange.end);
+    const inPrevious = withinRange(date, comparison.previousRange.start, comparison.previousRange.end);
+    if (!inCurrent && !inPrevious) return;
+    const name = momentumEntityName(row, entity);
+    if (!name) return;
+    grouped.set(name, [...(grouped.get(name) ?? []), row]);
+  });
+
+  const analysisRows = [...grouped.entries()].map(([name, entityRows]) => {
+    const currentRows = entityRows.filter((row) =>
+      withinRange(salesDate(row, dateBasis), comparison.currentRange.start, comparison.currentRange.end)
+    );
+    const previousRows = entityRows.filter((row) =>
+      withinRange(salesDate(row, dateBasis), comparison.previousRange.start, comparison.previousRange.end)
+    );
+    const currentRevenue = sum(currentRows, "revenue");
+    const previousRevenue = sum(previousRows, "revenue");
+    const currentQuantity = sum(currentRows, "quantity");
+    const previousQuantity = sum(previousRows, "quantity");
+
+    return {
+      name,
+      currentRevenue,
+      previousRevenue,
+      changeRevenue: currentRevenue - previousRevenue,
+      revenueChangePct: previousRevenue ? currentRevenue / previousRevenue - 1 : null,
+      currentQuantity,
+      previousQuantity,
+      changeQuantity: currentQuantity - previousQuantity,
+      quantityChangePct: previousQuantity ? currentQuantity / previousQuantity - 1 : null,
+      trend: buildComparisonSeries(
+        currentRows,
+        previousRows,
+        mode,
+        currentStart,
+        currentEnd,
+        previousStart,
+        dateBasis
+      )
+    };
+  });
+
+  return {
+    mode: comparison.mode,
+    basis: comparison.basis,
+    currentLabel: comparison.currentLabel,
+    previousLabel: comparison.previousLabel,
+    currentRange: comparison.currentRange,
+    previousRange: comparison.previousRange,
+    rows: analysisRows
+  };
+}
+
+export function rankEntityPeriodRows(
+  rows: EntityPeriodComparisonRow[],
+  measure: MomentumMeasure,
+  metric: MomentumMetric,
+  direction: "top" | "bottom",
+  limit = 20
+) {
+  const value = (row: EntityPeriodComparisonRow) => {
+    if (metric === "revenue") return measure === "revenue" ? row.currentRevenue : row.currentQuantity;
+    return measure === "revenue" ? row.changeRevenue : row.changeQuantity;
+  };
+  return [...rows]
+    .sort((a, b) => direction === "top" ? value(b) - value(a) : value(a) - value(b))
+    .slice(0, limit);
+}
+
+export function rankEntityPeriodRowsByVolume(
+  rows: EntityPeriodComparisonRow[],
+  measure: MomentumMeasure,
+  limit = 50
+) {
+  const volume = (row: EntityPeriodComparisonRow) => measure === "revenue"
+    ? row.currentRevenue + row.previousRevenue
+    : row.currentQuantity + row.previousQuantity;
+  return [...rows].sort((a, b) => volume(b) - volume(a)).slice(0, limit);
 }
 
 export function entityMomentum(

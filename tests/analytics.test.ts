@@ -4,11 +4,14 @@ import {
   createEmptyImportLedger,
   emptyFilters,
   entityMomentum,
+  entityPeriodComparison,
   partitionNewTransactions,
   periodComparison,
   productClassSkuUnits,
   productFamily,
   productFamilyOptions,
+  rankEntityPeriodRows,
+  rankEntityPeriodRowsByVolume,
   rankMomentumRows,
   rankMomentumRowsByVolume,
   resolveDateRange,
@@ -203,6 +206,75 @@ describe("period comparisons", () => {
       previousLabel: "Q1 2025 comparable",
       previousRange: { start: "2025-01-01", end: "2025-02-10" },
       previousRevenue: 300
+    });
+  });
+
+  it("ranks distributor performance across matched periods by revenue or units", () => {
+    const rows = [
+      makeTransaction({
+        customerName: "Growing Distributor",
+        salesCategory: "Distributor",
+        transactionDate: "2025-02-05",
+        revenue: 100,
+        quantity: 2
+      }),
+      makeTransaction({
+        documentNumber: "EV-D2",
+        customerName: "Growing Distributor",
+        salesCategory: "Distributor",
+        transactionDate: "2026-02-05",
+        revenue: 400,
+        quantity: 8
+      }),
+      makeTransaction({
+        documentNumber: "EV-D3",
+        customerName: "Declining Distributor",
+        salesCategory: "Distributor",
+        transactionDate: "2025-02-08",
+        revenue: 500,
+        quantity: 10
+      }),
+      makeTransaction({
+        documentNumber: "EV-D4",
+        customerName: "Declining Distributor",
+        salesCategory: "Distributor",
+        transactionDate: "2026-02-08",
+        revenue: 50,
+        quantity: 1
+      }),
+      makeTransaction({
+        documentNumber: "EV-ANCHOR",
+        customerName: "Date Anchor",
+        salesCategory: "Wholesale",
+        transactionDate: "2026-02-10",
+        revenue: 0,
+        quantity: 0
+      })
+    ];
+    const analysis = entityPeriodComparison(
+      rows,
+      "distributor",
+      "mom",
+      "transaction",
+      "2026-02-10",
+      "previous-year"
+    );
+
+    expect(analysis).toMatchObject({
+      currentLabel: "Feb 2026 MTD",
+      previousLabel: "Feb 2025 comparable",
+      currentRange: { start: "2026-02-01", end: "2026-02-10" },
+      previousRange: { start: "2025-02-01", end: "2025-02-10" }
+    });
+    expect(rankEntityPeriodRows(analysis?.rows ?? [], "revenue", "change", "top", 1)[0])
+      .toMatchObject({ name: "Growing Distributor", changeRevenue: 300 });
+    expect(rankEntityPeriodRows(analysis?.rows ?? [], "quantity", "change", "bottom", 1)[0])
+      .toMatchObject({ name: "Declining Distributor", changeQuantity: -9 });
+    expect(rankEntityPeriodRowsByVolume(analysis?.rows ?? [], "revenue", 1)[0].name)
+      .toBe("Declining Distributor");
+    expect(analysis?.rows[0].trend.at(-1)).toMatchObject({
+      currentRevenue: 400,
+      previousRevenue: 100
     });
   });
 });
