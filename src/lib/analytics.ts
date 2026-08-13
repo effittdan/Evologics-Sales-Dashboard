@@ -843,7 +843,8 @@ export function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: value >= 100000 ? 0 : 2
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
   }).format(value);
 }
 

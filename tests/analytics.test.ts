@@ -5,6 +5,7 @@ import {
   emptyFilters,
   entityMomentum,
   entityPeriodComparison,
+  formatCurrency,
   partitionNewTransactions,
   periodComparison,
   productClassSkuUnits,
@@ -53,6 +54,14 @@ describe("import ledger duplicate prevention", () => {
 
     expect(partition.accepted).toEqual([newRow]);
     expect(partition.skippedDuplicateRows).toBe(1);
+  });
+});
+
+describe("currency formatting", () => {
+  it("displays monetary values as whole dollars", () => {
+    expect(formatCurrency(12234.24)).toBe("$12,234");
+    expect(formatCurrency(3995.99)).toBe("$3,996");
+    expect(formatCurrency(0)).toBe("$0");
   });
 });
 

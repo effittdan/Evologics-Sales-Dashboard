@@ -2031,7 +2031,7 @@ function TrendView({
           <LineChart data={data} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
             <CartesianGrid stroke="#DDE7E1" vertical={false} />
             <XAxis dataKey="period" tick={{ fill: "#6F7775", fontSize: 12 }} />
-            <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} tick={{ fill: "#6F7775", fontSize: 12 }} />
+            <YAxis tickFormatter={(value) => formatCompactCurrency(Number(value))} tick={{ fill: "#6F7775", fontSize: 12 }} />
             <Tooltip formatter={(value) => formatCurrency(Number(value))} />
             <Line type="monotone" dataKey="revenue" stroke="#1F4F45" strokeWidth={3} dot={{ r: 3 }} />
           </LineChart>
@@ -3229,7 +3229,7 @@ function RevenueArea({ data }: { data: { period: string; revenue: number }[] }) 
         </defs>
         <CartesianGrid stroke="#DDE7E1" vertical={false} />
         <XAxis dataKey="period" tick={{ fill: "#6F7775", fontSize: 12 }} />
-        <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} tick={{ fill: "#6F7775", fontSize: 12 }} />
+        <YAxis tickFormatter={(value) => formatCompactCurrency(Number(value))} tick={{ fill: "#6F7775", fontSize: 12 }} />
         <Tooltip formatter={(value) => formatCurrency(Number(value))} />
         <Area dataKey="revenue" stroke="#1F4F45" strokeWidth={3} fill="url(#revenueFill)" />
       </AreaChart>
@@ -3249,7 +3249,7 @@ function RevenueBar({
       <BarChart data={data} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
         <CartesianGrid stroke="#DDE7E1" vertical={false} />
         <XAxis dataKey={nameKey} tick={{ fill: "#6F7775", fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={68} />
-        <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} tick={{ fill: "#6F7775", fontSize: 12 }} />
+        <YAxis tickFormatter={(value) => formatCompactCurrency(Number(value))} tick={{ fill: "#6F7775", fontSize: 12 }} />
         <Tooltip formatter={(value) => formatCurrency(Number(value))} />
         <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
           {data.map((_, index) => (
@@ -3565,7 +3565,8 @@ function formatCompactCurrency(value: number) {
     style: "currency",
     currency: "USD",
     notation: "compact",
-    maximumFractionDigits: 1
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
   }).format(value);
 }
 
