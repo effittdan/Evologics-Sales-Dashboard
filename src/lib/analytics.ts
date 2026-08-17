@@ -199,7 +199,17 @@ const managerAliases: Record<(typeof managerOptions)[number], string[]> = {
     "Team Cross Medical, LLC",
     "Adella Inc"
   ],
-  "Jerry Pascucci": ["Jerry Pascucci", "Pascucci Enterprises"]
+  "Jerry Pascucci": [
+    "Jerry Pascucci",
+    "Pascucci Enterprises",
+    "LAAB Medical",
+    "Gulf Coast Med Co",
+    "Kennedy Medical Inc",
+    "Ortho Haus Inc",
+    "Paul Sutherland",
+    "Andrew Leachman",
+    "Redmed"
+  ]
 };
 
 function matchesManager(value: string | undefined, selected: string[]) {

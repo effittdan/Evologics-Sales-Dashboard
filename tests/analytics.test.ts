@@ -328,15 +328,32 @@ describe("dashboard filters", () => {
       documentNumber: "EV-2",
       salesRepVendor: "Star Surgical Consultants LLC"
     });
-    const pascucci = makeTransaction({
-      documentNumber: "EV-3",
-      salesRepVendor: "Pascucci Enterprises"
+    const jerryDistributors = [
+      "Pascucci Enterprises",
+      "LAAB Medical",
+      "Gulf Coast Med Co",
+      "Kennedy Medical Inc",
+      "Ortho Haus Inc",
+      "Paul Sutherland",
+      "Andrew Leachman",
+      "Redmed"
+    ];
+    const jerryRows = jerryDistributors.map((salesRepVendor, index) =>
+      makeTransaction({ documentNumber: `EV-JERRY-${index + 1}`, salesRepVendor })
+    );
+    const unrelated = makeTransaction({
+      documentNumber: "EV-OTHER",
+      salesRepVendor: "Unrelated Distributor"
     });
 
-    expect(applyFilters([rachel, star, pascucci], { ...emptyFilters, managers: ["Ryan Gray"] }))
+    expect(applyFilters([rachel, star, ...jerryRows], { ...emptyFilters, managers: ["Ryan Gray"] }))
       .toEqual([rachel, star]);
-    expect(applyFilters([rachel, star, pascucci], { ...emptyFilters, managers: ["Jerry Pascucci"] }))
-      .toEqual([pascucci]);
+    expect(
+      applyFilters([rachel, star, ...jerryRows, unrelated], {
+        ...emptyFilters,
+        managers: ["Jerry Pascucci"]
+      })
+    ).toEqual(jerryRows);
   });
 
   it("groups Garrett Hebert's distributor territory under one manager filter", () => {
