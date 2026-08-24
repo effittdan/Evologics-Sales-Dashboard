@@ -30,8 +30,11 @@ describe("Netlify functions", () => {
     const fetchImplementation = async (input: string | URL | Request) => {
       const url = String(input);
       requestedUrls.push(url);
+      if (url.includes("/mailFolders/deleteditems/")) {
+        return Response.json({ value: [{ id: "deleted-message" }] });
+      }
       return Response.json(
-        requestedUrls.length === 1
+        url.includes("/mailFolders/inbox/")
           ? {
               value: [{ id: "newest-message" }],
               "@odata.nextLink": "https://graph.microsoft.com/v1.0/next-page"
@@ -47,14 +50,20 @@ describe("Netlify functions", () => {
       fetchImplementation as typeof fetch
     );
 
-    expect(messages.map((message) => message.id)).toEqual(["newest-message", "older-message"]);
-    expect(requestedUrls).toHaveLength(2);
+    expect(messages.map((message) => message.id)).toEqual([
+      "newest-message",
+      "older-message",
+      "deleted-message"
+    ]);
+    expect(requestedUrls).toHaveLength(3);
     const firstRequest = new URL(requestedUrls[0]);
+    const deletedItemsRequest = new URL(requestedUrls[2]);
     expect(firstRequest.searchParams.get("$orderby")).toBe("receivedDateTime desc");
     expect(firstRequest.searchParams.get("$top")).toBe("100");
     expect(firstRequest.searchParams.get("$filter")).toBe(
       "receivedDateTime ge 2026-08-05T12:00:00.000Z"
     );
+    expect(deletedItemsRequest.pathname).toContain("/mailFolders/deleteditems/messages");
   });
 
   it("exposes automated import history through the authenticated API route", () => {
