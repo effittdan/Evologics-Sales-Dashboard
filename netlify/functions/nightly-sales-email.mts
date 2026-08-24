@@ -61,18 +61,27 @@ export async function runNightlySalesEmailImport(
       accessToken,
       fetchImplementation
     );
-    for (const attachment of attachments.filter(isSupportedSalesAttachment)) {
+    const supportedAttachments = await resolveSupportedSalesAttachments(
+      mailbox,
+      message.id,
+      attachments,
+      accessToken,
+      fetchImplementation
+    );
+    for (const { attachment, sourceAttachmentId, contentBytes } of supportedAttachments) {
       try {
         if ((attachment.size ?? 0) > maximumAttachmentBytes) {
           throw new Error(`Attachment exceeds the ${maximumAttachmentBytes} byte import limit.`);
         }
-        const text = await downloadAttachment(
-          mailbox,
-          message.id,
-          attachment.id,
-          accessToken,
-          fetchImplementation
-        );
+        const text = contentBytes
+          ? decodeBase64Attachment(contentBytes)
+          : await downloadAttachment(
+              mailbox,
+              message.id,
+              sourceAttachmentId,
+              accessToken,
+              fetchImplementation
+            );
         const importedAt = now.toISOString();
         const batchId = `graph-${message.id}-${attachment.id}`;
         const prepared = await prepareAutomatedSalesImport(
@@ -352,6 +361,60 @@ async function listMessageAttachments(
   return Array.isArray(payload.value) ? (payload.value as GraphFileAttachment[]) : [];
 }
 
+type ResolvedSalesAttachment = {
+  attachment: GraphFileAttachment;
+  sourceAttachmentId: string;
+  contentBytes?: string;
+};
+
+export async function resolveSupportedSalesAttachments(
+  mailbox: string,
+  messageId: string,
+  attachments: GraphFileAttachment[],
+  accessToken: string,
+  fetchImplementation: typeof fetch
+) {
+  const resolved: ResolvedSalesAttachment[] = attachments
+    .filter(isSupportedSalesAttachment)
+    .map((attachment) => ({ attachment, sourceAttachmentId: attachment.id }));
+
+  for (const attachment of attachments) {
+    if (attachment.isInline || attachment["@odata.type"] !== "#microsoft.graph.itemAttachment") {
+      continue;
+    }
+    const url = `${graphBaseUrl}/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachment.id)}?$expand=microsoft.graph.itemattachment/item`;
+    const expanded = (await fetchGraphJson(
+      url,
+      accessToken,
+      fetchImplementation
+    )) as GraphFileAttachment;
+    collectNestedSalesAttachments(expanded.item?.attachments ?? [], attachment.id, resolved);
+  }
+
+  return resolved;
+}
+
+function collectNestedSalesAttachments(
+  attachments: GraphFileAttachment[],
+  sourceAttachmentId: string,
+  resolved: ResolvedSalesAttachment[]
+) {
+  for (const attachment of attachments) {
+    if (isSupportedSalesAttachment(attachment) && attachment.contentBytes) {
+      resolved.push({ attachment, sourceAttachmentId, contentBytes: attachment.contentBytes });
+    }
+    if (attachment["@odata.type"] === "#microsoft.graph.itemAttachment") {
+      collectNestedSalesAttachments(attachment.item?.attachments ?? [], sourceAttachmentId, resolved);
+    }
+  }
+}
+
+function decodeBase64Attachment(contentBytes: string) {
+  const binary = atob(contentBytes);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
 async function downloadAttachment(
   mailbox: string,
   messageId: string,
@@ -379,7 +442,7 @@ async function fetchGraphJson(
   if (!response.ok) {
     throw new Error(payload.error?.message || `Microsoft Graph request failed (${response.status}).`);
   }
-  return payload as { value?: unknown[]; "@odata.nextLink"?: string };
+  return payload as { value?: unknown[]; "@odata.nextLink"?: string } & Record<string, unknown>;
 }
 
 function requiredEnvironmentVariable(name: string) {
