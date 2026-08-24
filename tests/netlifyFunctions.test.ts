@@ -7,7 +7,8 @@ import { handler as identityValidateHandler } from "../netlify/functions/identit
 import { handler as salesLedgerHandler } from "../netlify/functions/sales-ledger.js";
 import {
   config as nightlySalesEmailConfig,
-  listRecentMessages
+  listRecentMessages,
+  resolveSupportedSalesAttachments
 } from "../netlify/functions/nightly-sales-email.mts";
 import { config as salesImportHistoryConfig } from "../netlify/functions/sales-import-history.mts";
 import {
@@ -64,6 +65,56 @@ describe("Netlify functions", () => {
       "receivedDateTime ge 2026-08-05T12:00:00.000Z"
     );
     expect(deletedItemsRequest.pathname).toContain("/mailFolders/deleteditems/messages");
+  });
+
+  it("extracts supported reports from attached Outlook messages", async () => {
+    const requestedUrls: string[] = [];
+    const report = "Transaction Date,Document Number,SKU,Revenue\n8/19/2026,EV-1,EAP-48,2250";
+    const fetchImplementation = async (input: string | URL | Request) => {
+      requestedUrls.push(String(input));
+      return Response.json({
+        id: "forwarded-email",
+        "@odata.type": "#microsoft.graph.itemAttachment",
+        item: {
+          attachments: [
+            {
+              id: "nested-report",
+              name: "Wednesday.csv",
+              size: report.length,
+              isInline: false,
+              contentBytes: btoa(report),
+              "@odata.type": "#microsoft.graph.fileAttachment"
+            },
+            {
+              id: "nested-logo",
+              name: "logo.png",
+              isInline: true,
+              "@odata.type": "#microsoft.graph.fileAttachment"
+            }
+          ]
+        }
+      });
+    };
+
+    const attachments = await resolveSupportedSalesAttachments(
+      "theresa@evologicsamerica.com",
+      "deleted-message",
+      [
+        {
+          id: "forwarded-email",
+          name: "FW: sales report",
+          isInline: false,
+          "@odata.type": "#microsoft.graph.itemAttachment"
+        }
+      ],
+      "test-token",
+      fetchImplementation as typeof fetch
+    );
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].attachment.name).toBe("Wednesday.csv");
+    expect(attachments[0].contentBytes).toBe(btoa(report));
+    expect(requestedUrls[0]).toContain("$expand=microsoft.graph.itemattachment/item");
   });
 
   it("exposes automated import history through the authenticated API route", () => {
