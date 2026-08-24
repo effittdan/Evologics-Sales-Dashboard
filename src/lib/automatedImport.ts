@@ -33,6 +33,8 @@ export type GraphFileAttachment = {
   contentType?: string;
   size?: number;
   isInline?: boolean;
+  contentBytes?: string;
+  item?: { attachments?: GraphFileAttachment[] };
   "@odata.type"?: string;
 };
 
