@@ -35,7 +35,7 @@ export type DashboardFilters = {
 
 export const emptyFilters: DashboardFilters = {
   datePreset: "all",
-  dateBasis: "transaction",
+  dateBasis: "created",
   salesRepVendor: [],
   salesGroup: [],
   managers: [],
