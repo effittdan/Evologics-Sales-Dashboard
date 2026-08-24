@@ -17,6 +17,7 @@ declare const Netlify: {
 const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const maximumAttachmentBytes = 5 * 1024 * 1024;
 const maximumMessagePages = 5;
+const recoveryLookbackMilliseconds = 7 * 24 * 60 * 60 * 1000;
 const automationIdentity = "microsoft-graph-automation";
 
 export default async () => {
@@ -316,7 +317,9 @@ export async function listRecentMessages(
   now: Date,
   fetchImplementation: typeof fetch
 ) {
-  const since = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  // Keep enough history to recover reports after a weekend or a missed
+  // scheduled invocation. File and transaction fingerprints make rechecks safe.
+  const since = new Date(now.getTime() - recoveryLookbackMilliseconds).toISOString();
   const params = new URLSearchParams({
     "$select": "id,internetMessageId,subject,from,sender,receivedDateTime,hasAttachments",
     "$filter": `receivedDateTime ge ${since}`,
