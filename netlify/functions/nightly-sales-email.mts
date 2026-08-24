@@ -73,7 +73,7 @@ export async function runNightlySalesEmailImport(
         if ((attachment.size ?? 0) > maximumAttachmentBytes) {
           throw new Error(`Attachment exceeds the ${maximumAttachmentBytes} byte import limit.`);
         }
-        const text = contentBytes
+        const content = contentBytes
           ? decodeBase64Attachment(contentBytes)
           : await downloadAttachment(
               mailbox,
@@ -86,7 +86,7 @@ export async function runNightlySalesEmailImport(
         const batchId = `graph-${message.id}-${attachment.id}`;
         const prepared = await prepareAutomatedSalesImport(
           attachment.name ?? "netsuite-sales-report.xls",
-          text,
+          content,
           importedAt,
           batchId
         );
@@ -411,8 +411,7 @@ function collectNestedSalesAttachments(
 
 function decodeBase64Attachment(contentBytes: string) {
   const binary = atob(contentBytes);
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  return new TextDecoder("utf-8").decode(bytes);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
 async function downloadAttachment(
@@ -427,7 +426,7 @@ async function downloadAttachment(
     headers: { authorization: `Bearer ${accessToken}` }
   });
   if (!response.ok) throw new Error(`Microsoft Graph attachment download failed (${response.status}).`);
-  return new TextDecoder("utf-8").decode(await response.arrayBuffer());
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 async function fetchGraphJson(

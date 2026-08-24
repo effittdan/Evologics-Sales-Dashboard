@@ -150,6 +150,30 @@ export function parseNetSuiteSavedSearchCSV(
   };
 }
 
+export async function parseNetSuiteXlsxReport(
+  sourceFile: string,
+  content: Uint8Array
+): Promise<ParsedSalesRows> {
+  const { default: ExcelJS } = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Buffer.from(content) as never);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    return emptyParsed(sourceFile, "Unknown", ["The XLSX workbook did not contain a worksheet."]);
+  }
+
+  const rows: string[][] = [];
+  worksheet.eachRow({ includeEmpty: false }, (row) => {
+    rows.push(
+      Array.from({ length: worksheet.actualColumnCount }, (_, index) =>
+        row.getCell(index + 1).text.trim()
+      )
+    );
+  });
+  const parsed = parseNetSuiteSavedSearchCSV(sourceFile, Papa.unparse(rows));
+  return { ...parsed, sourceSheetName: worksheet.name };
+}
+
 export function parseNetSuiteSavedSearchXML(
   sourceFile: string,
   text: string

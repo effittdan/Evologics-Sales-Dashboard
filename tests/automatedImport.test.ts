@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import ExcelJS from "exceljs";
 import {
   isNightlySalesMessage,
   isSupportedSalesAttachment,
@@ -20,6 +21,14 @@ describe("automated nightly sales imports", () => {
         }
       })
     ).toBe(true);
+    expect(
+      isSupportedSalesAttachment({
+        id: "attachment-xlsx",
+        name: "searchresults.xlsx",
+        isInline: false,
+        "@odata.type": "#microsoft.graph.fileAttachment"
+      })
+    ).toBe(true);
 
     expect(
       isNightlySalesMessage({
@@ -29,6 +38,34 @@ describe("automated nightly sales imports", () => {
         from: { emailAddress: { address: "system@sent-via.netsuite.com" } }
       })
     ).toBe(false);
+  });
+
+  it("converts and normalizes modern XLSX NetSuite reports", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Friday Sales");
+    sheet.addRows([
+      ["Category", "Name", "Type", "Date", "Document Number", "PO/Check Number", "Item", "Amount"],
+      ["Direct Retail", "Test Customer", "Invoice", "8/19/2026", "EV-74259", "PO-1", "EAP-48", 2446.88],
+      ["Total", "", "", "", "", "", "", 2446.88]
+    ]);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const prepared = await prepareAutomatedSalesImport(
+      "searchresults.xlsx",
+      new Uint8Array(buffer),
+      "2026-08-21T07:15:00.000Z",
+      "xlsx-test"
+    );
+
+    expect(prepared.reviewReasons).toEqual([]);
+    expect(prepared.transactions).toHaveLength(1);
+    expect(prepared.transactions[0]).toMatchObject({
+      transactionDate: "2026-08-19",
+      documentNumber: "EV-74259",
+      sku: "EAP-48",
+      revenue: 2446.88
+    });
+    expect(prepared.parsed.sourceSheetName).toBe("Friday Sales");
+    expect(prepared.parsed.excludedTotalRows).toBe(1);
   });
 
   it("accepts supported file attachments and rejects inline content", () => {

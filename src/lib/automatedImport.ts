@@ -7,7 +7,8 @@ import {
   normalizeSalesTransactionRows,
   parseNetSuiteSavedSearchCSV,
   parseNetSuiteSavedSearchXML,
-  parseNetSuiteSpreadsheetMLReport
+  parseNetSuiteSpreadsheetMLReport,
+  parseNetSuiteXlsxReport
 } from "./importers";
 import type { ImportQualitySummary, ParsedSalesRows, SalesTransaction } from "../types";
 
@@ -64,18 +65,18 @@ export function isSupportedSalesAttachment(attachment: GraphFileAttachment) {
     return false;
   }
   const name = attachment.name?.trim().toLowerCase() ?? "";
-  return name.endsWith(".xls") || name.endsWith(".xml") || name.endsWith(".csv");
+  return name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".xml") || name.endsWith(".csv");
 }
 
 export async function prepareAutomatedSalesImport(
   fileName: string,
-  text: string,
+  content: string | Uint8Array,
   importedAt: string,
   batchId: string
 ): Promise<PreparedAutomatedImport> {
-  const parsed = parseSalesFile(fileName, text);
+  const parsed = await parseSalesFile(fileName, content);
   const transactions = normalizeSalesTransactionRows(parsed.rows);
-  const fileFingerprint = await fingerprintSalesFile(fileName, text);
+  const fileFingerprint = await fingerprintSalesFile(fileName, content);
   const transactionKeys = transactions.map(salesTransactionKey);
   const quality = buildImportQualitySummary(parsed, transactions, {
     batchId,
@@ -95,8 +96,13 @@ export async function prepareAutomatedSalesImport(
   };
 }
 
-export function parseSalesFile(fileName: string, text: string) {
+export async function parseSalesFile(fileName: string, content: string | Uint8Array) {
   const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith(".xlsx")) {
+    const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+    return parseNetSuiteXlsxReport(fileName, bytes);
+  }
+  const text = typeof content === "string" ? content : new TextDecoder("utf-8").decode(content);
   if (isSpreadsheetMLExport(text)) {
     return parseNetSuiteSpreadsheetMLReport(fileName, text);
   }
@@ -106,8 +112,9 @@ export function parseSalesFile(fileName: string, text: string) {
   return parseNetSuiteSavedSearchXML(fileName, text);
 }
 
-export async function fingerprintSalesFile(fileName: string, text: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+export async function fingerprintSalesFile(fileName: string, content: string | Uint8Array) {
+  const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
   const hash = [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
