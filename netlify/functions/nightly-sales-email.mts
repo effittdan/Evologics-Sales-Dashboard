@@ -18,6 +18,7 @@ const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const maximumAttachmentBytes = 5 * 1024 * 1024;
 const maximumMessagePages = 5;
 const recoveryLookbackMilliseconds = 7 * 24 * 60 * 60 * 1000;
+const messageFolderNames = ["inbox", "deleteditems"] as const;
 const automationIdentity = "microsoft-graph-automation";
 
 export default async () => {
@@ -326,16 +327,18 @@ export async function listRecentMessages(
     "$orderby": "receivedDateTime desc",
     "$top": "100"
   });
-  let nextUrl: string | undefined = `${graphBaseUrl}/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages?${params}`;
   const messages: GraphSalesMessage[] = [];
 
-  for (let page = 0; nextUrl && page < maximumMessagePages; page += 1) {
-    const payload = await fetchGraphJson(nextUrl, accessToken, fetchImplementation);
-    if (Array.isArray(payload.value)) messages.push(...(payload.value as GraphSalesMessage[]));
-    nextUrl = typeof payload["@odata.nextLink"] === "string" ? payload["@odata.nextLink"] : undefined;
+  for (const folderName of messageFolderNames) {
+    let nextUrl: string | undefined = `${graphBaseUrl}/users/${encodeURIComponent(mailbox)}/mailFolders/${folderName}/messages?${params}`;
+    for (let page = 0; nextUrl && page < maximumMessagePages; page += 1) {
+      const payload = await fetchGraphJson(nextUrl, accessToken, fetchImplementation);
+      if (Array.isArray(payload.value)) messages.push(...(payload.value as GraphSalesMessage[]));
+      nextUrl = typeof payload["@odata.nextLink"] === "string" ? payload["@odata.nextLink"] : undefined;
+    }
   }
 
-  return messages;
+  return [...new Map(messages.map((message) => [message.id, message])).values()];
 }
 
 async function listMessageAttachments(
