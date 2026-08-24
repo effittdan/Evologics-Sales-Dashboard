@@ -52,6 +52,9 @@ describe("Netlify functions", () => {
     const firstRequest = new URL(requestedUrls[0]);
     expect(firstRequest.searchParams.get("$orderby")).toBe("receivedDateTime desc");
     expect(firstRequest.searchParams.get("$top")).toBe("100");
+    expect(firstRequest.searchParams.get("$filter")).toBe(
+      "receivedDateTime ge 2026-08-05T12:00:00.000Z"
+    );
   });
 
   it("exposes automated import history through the authenticated API route", () => {
