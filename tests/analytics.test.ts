@@ -434,10 +434,12 @@ describe("dashboard filters", () => {
       "Fascia Lata & Pericardium"
     ]);
     expect(productFamilyOptions([])).toEqual(["A-MATRX"]);
+    expect(skuOptionsForProductFamilies([], ["A-MATRX"]))
+      .toEqual(["EAF-40", "EAF-80", "EAF-160", "EAF-250"]);
     expect(applyFilters(aMatrxSkuRows, { ...emptyFilters, productClass: ["A-MATRX"] }))
       .toEqual(aMatrxSkuRows);
     expect(skuOptionsForProductFamilies(aMatrxSkuRows, ["A-MATRX"]))
-      .toEqual(["EAF-160", "EAF-250", "EAF-40", "EAF-80"]);
+      .toEqual(["EAF-40", "EAF-80", "EAF-160", "EAF-250"]);
     expect(applyFilters([evoPatch, dbm, fascia], { ...emptyFilters, productClass: ["DBM"] }))
       .toEqual([dbm]);
     expect(skuOptionsForProductFamilies([evoPatch, dbm, fascia], ["DBM"]))

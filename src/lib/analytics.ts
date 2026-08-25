@@ -223,7 +223,11 @@ function matchesManager(value: string | undefined, selected: string[]) {
   );
 }
 
-const aMatrxSkus = new Set(["EAF-40", "EAF-80", "EAF-160", "EAF-250"]);
+const productFamilySkuCatalog: Record<string, readonly string[]> = {
+  "A-MATRX": ["EAF-40", "EAF-80", "EAF-160", "EAF-250"]
+};
+
+const aMatrxSkus = new Set(productFamilySkuCatalog["A-MATRX"]);
 
 export function productFamily(row: SalesTransaction) {
   const sku = row.sku.trim().toUpperCase();
@@ -250,14 +254,14 @@ export function productFamilyOptions(rows: SalesTransaction[]) {
 }
 
 export function skuOptionsForProductFamilies(rows: SalesTransaction[], families: string[]) {
-  return Array.from(
-    new Set(
-      rows
-        .filter((row) => !families.length || families.includes(productFamily(row)))
-        .map((row) => row.sku)
-        .filter(Boolean)
-    )
-  ).sort((a, b) => a.localeCompare(b));
+  const catalogSkus = families.flatMap((family) => productFamilySkuCatalog[family] ?? []);
+  const transactionSkus = rows
+    .filter((row) => !families.length || families.includes(productFamily(row)))
+    .map((row) => row.sku)
+    .filter(Boolean);
+
+  return Array.from(new Set([...catalogSkus, ...transactionSkus]))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
 }
 
 export function withoutShippingStateFilter(filters: DashboardFilters): DashboardFilters {
