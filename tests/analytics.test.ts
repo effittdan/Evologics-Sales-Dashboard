@@ -396,6 +396,12 @@ describe("dashboard filters", () => {
       productDescription: "A-MATRX",
       productClass: "Acellular Dermal Matrix"
     });
+    const netSuiteAMatrx = makeTransaction({
+      documentNumber: "EV-AM-NETSUITE",
+      sku: "EAF-40",
+      productDescription: "A-MATRX micrograft, 40MG",
+      productClass: "Amniotic Tissue : EvoPatch"
+    });
     const aMatrxSkuRows = ["EAF-40", "EAF-80", "EAF-160", "EAF-250"].map((sku, index) =>
       makeTransaction({
         documentNumber: `EV-EAF-${index + 1}`,
@@ -419,6 +425,7 @@ describe("dashboard filters", () => {
 
     expect(productFamily(evoPatch)).toBe("EvoPatch");
     expect(productFamily(aMatrx)).toBe("A-MATRX");
+    expect(productFamily(netSuiteAMatrx)).toBe("A-MATRX");
     expect(aMatrxSkuRows.map(productFamily)).toEqual([
       "A-MATRX",
       "A-MATRX",
