@@ -232,8 +232,8 @@ const aMatrxSkus = new Set(productFamilySkuCatalog["A-MATRX"]);
 export function productFamily(row: SalesTransaction) {
   const sku = row.sku.trim().toUpperCase();
   const source = `${row.productClass ?? ""} ${row.productDescription} ${row.sku}`.toLowerCase();
-  if (source.includes("evo patch") || source.includes("evopatch")) return "EvoPatch";
   if (aMatrxSkus.has(sku) || source.includes("a-matrx") || source.includes("amatrx") || source.includes("evoflakes")) return "A-MATRX";
+  if (source.includes("evo patch") || source.includes("evopatch")) return "EvoPatch";
   if (source.includes("demineralized bone matrix") || /\bdbm\b/.test(source)) return "DBM";
   if (source.includes("cancellous")) return "Cancellous";
   if (source.includes("fascia lata") || source.includes("pericardium")) return "Fascia Lata & Pericardium";
