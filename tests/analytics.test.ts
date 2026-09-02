@@ -440,7 +440,7 @@ describe("dashboard filters", () => {
       "EvoPatch",
       "Fascia Lata & Pericardium"
     ]);
-    expect(productFamilyOptions([])).toEqual(["A-MATRX"]);
+    expect(productFamilyOptions([])).toEqual([]);
     expect(skuOptionsForProductFamilies([], ["A-MATRX"]))
       .toEqual(["EAF-40", "EAF-80", "EAF-160", "EAF-250"]);
     expect(applyFilters(aMatrxSkuRows, { ...emptyFilters, productClass: ["A-MATRX"] }))

@@ -6,6 +6,7 @@ import {
   login,
   logout,
   onAuthChange,
+  refreshSession,
   signup,
   updateUser
 } from "@netlify/identity";
@@ -38,6 +39,12 @@ export async function initializeNetlifyIdentity() {
         : callback?.type === "invite" && callback.token
           ? { type: "invite", token: callback.token }
           : null;
+
+    // A returning browser can still have a valid Identity profile while its
+    // access-token cookie has expired. Refresh it before the dashboard makes
+    // authenticated function requests, otherwise the UI falls back to an
+    // empty local ledger until the user signs in again.
+    await refreshSession();
 
     return {
       user: normalizeNetlifyUser(await getUser()),
