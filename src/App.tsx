@@ -1638,6 +1638,14 @@ function Overview({
   useEffect(() => {
     if (filters.productClass.length === 1 && productClassOptions.includes(filters.productClass[0])) {
       setSelectedProductClass(filters.productClass[0]);
+      return;
+    }
+
+    // Keep the Overview unit-analysis selector aligned with the global filter.
+    // Otherwise, "Clear all" removes the global filter but leaves the page
+    // looking locked to the previously selected product class.
+    if (filters.productClass.length === 0) {
+      setSelectedProductClass("");
     }
   }, [filters.productClass, productClassOptions]);
 
