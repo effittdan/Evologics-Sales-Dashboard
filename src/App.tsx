@@ -572,11 +572,23 @@ export function App() {
   }
 
   async function signOut() {
-    if (netlifyIdentityEnabled) {
-      await logoutNetlifyIdentity();
+    try {
+      if (netlifyIdentityEnabled) {
+        await logoutNetlifyIdentity();
+      }
+      setAuthNotice("");
+    } catch (error) {
+      setAuthNotice(
+        error instanceof Error
+          ? `The remote session could not be closed: ${error.message}`
+          : "The remote session could not be closed. Please try logging out again."
+      );
+    } finally {
+      setSession(null);
+      setAuthChallenge(null);
+      setFilters(emptyFilters);
+      setActiveView("overview");
     }
-    setSession(null);
-    setActiveView("overview");
   }
 
   async function addUser(input: { name: string; email: string; role: AppUserRole; password: string }) {
@@ -717,11 +729,12 @@ export function App() {
               </>
             ) : null}
             <button
-              className="ghost-button icon-button"
+              className="ghost-button logout-button"
               onClick={() => void signOut()}
               aria-label="Sign out"
             >
               <LogOut size={18} />
+              Log out
             </button>
           </div>
         </header>
