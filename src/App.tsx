@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BarChart3,
   Database,
+  Download,
   FileUp,
   LockKeyhole,
   LogOut,
@@ -46,6 +47,8 @@ import {
   formatPercent,
   kpis,
   managerOptions,
+  newProductAccounts,
+  newProductAccountYears,
   optionValues,
   partitionNewTransactions,
   periodComparison,
@@ -69,6 +72,7 @@ import {
   type MomentumEntity,
   type MomentumMeasure,
   type MomentumMetric,
+  type NewAccountProductFamily,
   type PeriodComparisonAnalysis,
   type PeriodComparisonBasis,
   type PeriodComparisonMode,
@@ -659,6 +663,9 @@ export function App() {
           <NavButton icon={<Database />} id="customers" active={activeView} onClick={setActiveView}>
             Customers & States
           </NavButton>
+          <NavButton icon={<UserPlus />} id="new-accounts" active={activeView} onClick={setActiveView}>
+            New Accounts
+          </NavButton>
           <NavButton icon={<TrendingUp />} id="momentum" active={activeView} onClick={setActiveView}>
             Growth & Risk
           </NavButton>
@@ -680,18 +687,20 @@ export function App() {
             <p className="eyebrow">NetSuite source-agnostic import MVP</p>
             <h1>Evologics Sales Analytics</h1>
             <p className="subtle">
-              {filtered.length.toLocaleString()} of {enriched.length.toLocaleString()} normalized line
-              items
-              {filteredRange
-                ? ` | active ${filters.dateBasis === "created" ? "created dates" : "transaction dates"} ${filteredRange.start} to ${filteredRange.end}`
-                : ""}
+              {activeView === "new-accounts"
+                ? `${enriched.length.toLocaleString()} normalized line items available for eligibility review`
+                : `${filtered.length.toLocaleString()} of ${enriched.length.toLocaleString()} normalized line items${filteredRange
+                    ? ` | active ${filters.dateBasis === "created" ? "created dates" : "transaction dates"} ${filteredRange.start} to ${filteredRange.end}`
+                    : ""}`}
             </p>
           </div>
-          <GlobalFilterSearch
-            rows={enriched}
-            filters={filters}
-            setFilters={setFilters}
-          />
+          {activeView !== "new-accounts" ? (
+            <GlobalFilterSearch
+              rows={enriched}
+              filters={filters}
+              setFilters={setFilters}
+            />
+          ) : null}
           <div className="import-actions">
             <div className="user-chip">
               <span>{currentUser.name}</span>
@@ -742,12 +751,14 @@ export function App() {
         {sharedLedgerMessage ? <div className="status-strip">{sharedLedgerMessage}</div> : null}
         {importMessage ? <div className="status-strip">{importMessage}</div> : null}
 
-        <FilterPanel
-          rows={enriched}
-          filters={filters}
-          setFilters={setFilters}
-          selectedRange={selectedRange}
-        />
+        {activeView !== "new-accounts" ? (
+          <FilterPanel
+            rows={enriched}
+            filters={filters}
+            setFilters={setFilters}
+            selectedRange={selectedRange}
+          />
+        ) : null}
 
         {activeView === "users" ? (
           <UserList
@@ -807,6 +818,9 @@ export function App() {
             )}
             {activeView === "customers" && (
               <CustomerGeoView rows={filtered} dateBasis={filters.dateBasis} />
+            )}
+            {activeView === "new-accounts" && (
+              <NewAccountsView rows={enriched} sourceUpdatedAt={sharedLedgerMeta?.updatedAt} />
             )}
             {activeView === "momentum" && (
               <GrowthRiskView
@@ -2506,6 +2520,258 @@ function CustomerGeoView({ rows, dateBasis }: { rows: SalesTransaction[]; dateBa
   );
 }
 
+function NewAccountsView({
+  rows,
+  sourceUpdatedAt
+}: {
+  rows: SalesTransaction[];
+  sourceUpdatedAt?: string | null;
+}) {
+  const [dateBasis, setDateBasis] = useState<DateBasis>("transaction");
+  const availableYears = useMemo(() => newProductAccountYears(rows, dateBasis), [rows, dateBasis]);
+  const [selectedYear, setSelectedYear] = useState(
+    () => newProductAccountYears(rows, "transaction")[0] ?? new Date().getFullYear()
+  );
+  const [productFilter, setProductFilter] = useState<"all" | NewAccountProductFamily>("all");
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"first-sale" | "sales" | "account">("first-sale");
+  const activeYear = availableYears.includes(selectedYear) ? selectedYear : availableYears[0] ?? selectedYear;
+  const analysis = useMemo(
+    () => newProductAccounts(rows, activeYear, dateBasis),
+    [rows, activeYear, dateBasis]
+  );
+  const displayedRows = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const filteredRows = analysis.rows.filter((row) => {
+      if (productFilter !== "all" && !row.productFamilies.includes(productFilter)) return false;
+      if (!normalizedQuery) return true;
+      return [
+        row.customerCode,
+        row.customerName,
+        row.productFamilies.join(" "),
+        row.salesRepVendor,
+        row.shippingState
+      ].some((value) => value?.toLowerCase().includes(normalizedQuery));
+    });
+
+    return [...filteredRows].sort((a, b) => {
+      if (sortBy === "sales") return b.currentRevenue - a.currentRevenue;
+      if (sortBy === "account") return a.customerName.localeCompare(b.customerName);
+      return b.firstSaleDate.localeCompare(a.firstSaleDate) || b.currentRevenue - a.currentRevenue;
+    });
+  }, [analysis.rows, productFilter, query, sortBy]);
+
+  useEffect(() => {
+    if (availableYears.length && !availableYears.includes(selectedYear)) {
+      setSelectedYear(availableYears[0]);
+    }
+  }, [availableYears, selectedYear]);
+
+  const totalRevenue = displayedRows.reduce((total, row) => total + row.currentRevenue, 0);
+  const totalUnits = displayedRows.reduce((total, row) => total + row.currentQuantity, 0);
+  const evoPatchAccounts = displayedRows.filter((row) => row.productFamilies.includes("EvoPatch")).length;
+  const aMatrxAccounts = displayedRows.filter((row) => row.productFamilies.includes("A-MATRX")).length;
+  const bothAccounts = displayedRows.filter((row) => row.productFamilies.length === 2).length;
+  const basisLabel = dateBasis === "created" ? "created date" : "transaction date";
+  const hasPriorYearRows = Boolean(analysis.previousCoverage);
+  const accountStatusLabel = hasPriorYearRows ? "Eligible accounts" : "Candidate accounts";
+
+  function printReport() {
+    const previousTitle = document.title;
+    document.title = `Evologics new EvoPatch and A-MATRX accounts - ${activeYear}`;
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+    window.addEventListener("afterprint", restoreTitle);
+    window.print();
+  }
+
+  function exportCsv() {
+    const csvRows: Array<Array<string | number>> = [
+      [
+        "Customer Code",
+        "Account",
+        "Eligibility Status",
+        "Product Lines",
+        "First Sale",
+        `${activeYear} Sales`,
+        `${analysis.previousYear} Sales`,
+        "Units",
+        "Documents",
+        "Sales Rep / Vendor",
+        "State"
+      ],
+      ...displayedRows.map((row) => [
+        row.customerCode ?? "",
+        row.customerName,
+        hasPriorYearRows ? "Eligible" : `Provisional - no ${analysis.previousYear} rows loaded`,
+        row.productFamilies.join(" + "),
+        row.firstSaleDate,
+        Math.round(row.currentRevenue),
+        Math.round(row.previousRevenue),
+        row.currentQuantity,
+        row.documents,
+        row.salesRepVendor,
+        row.shippingState
+      ])
+    ];
+    downloadCsv(`evologics-new-product-accounts-${activeYear}.csv`, csvRows);
+  }
+
+  return (
+    <section className="view-stack new-account-report">
+      <div className="report-toolbar no-print">
+        <button className="ghost-button" type="button" onClick={exportCsv} disabled={!displayedRows.length}>
+          <Download size={18} />
+          Export CSV
+        </button>
+        <button className="upload-button" type="button" onClick={printReport} disabled={!displayedRows.length}>
+          <Printer size={18} />
+          Save PDF
+        </button>
+      </div>
+
+      <div className="new-account-report-header">
+        <div>
+          <p className="eyebrow">New account bonus review</p>
+          <h2>New EvoPatch / A-MATRX Accounts</h2>
+          <p className="subtle">
+            {activeYear} accounts with positive EvoPatch or A-MATRX sales and $0 net sales, with no positive product sales, in {analysis.previousYear}.
+          </p>
+          <p className="new-account-meta">
+            Using {basisLabel}s | Generated {formatShortDateTime(new Date().toISOString())}
+            {sourceUpdatedAt ? ` | Source updated ${formatShortDateTime(sourceUpdatedAt)}` : ""}
+          </p>
+        </div>
+        <img src="/evologics-logo-wide.png" alt="Evologics" />
+      </div>
+
+      <div className="new-account-method">
+        <strong>Eligibility rule</strong>
+        <span>
+          Customer codes are consolidated across name variations. Prior-year invoice activity cannot be cancelled out by credits to create a new account.
+        </span>
+      </div>
+
+      <div className="product-class-controls new-account-controls no-print">
+        <label>
+          Sales year
+          <select value={activeYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
+            {availableYears.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+        </label>
+        <div className="product-class-period-control">
+          <span>Date basis</span>
+          <div className="segmented" aria-label="New account date basis">
+            {(["transaction", "created"] as const).map((basis) => (
+              <button
+                key={basis}
+                type="button"
+                className={dateBasis === basis ? "active" : ""}
+                onClick={() => setDateBasis(basis)}
+              >
+                {basis === "transaction" ? "Transaction" : "Created"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label>
+          Product line
+          <select
+            value={productFilter}
+            onChange={(event) => setProductFilter(event.target.value as "all" | NewAccountProductFamily)}
+          >
+            <option value="all">EvoPatch + A-MATRX</option>
+            <option value="EvoPatch">EvoPatch</option>
+            <option value="A-MATRX">A-MATRX</option>
+          </select>
+        </label>
+        <label className="new-account-search">
+          Find account
+          <input
+            type="search"
+            value={query}
+            placeholder="Account, rep, state..."
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <label>
+          Sort
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}>
+            <option value="first-sale">Newest first sale</option>
+            <option value="sales">Highest sales</option>
+            <option value="account">Account name</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="kpi-grid compact new-account-kpis">
+        <Kpi label={accountStatusLabel} value={displayedRows.length.toLocaleString()} />
+        <Kpi label={`${activeYear} sales`} value={formatCurrency(totalRevenue)} />
+        <Kpi label="Units" value={formatNumber(totalUnits)} />
+        <Kpi label="EvoPatch accounts" value={evoPatchAccounts.toLocaleString()} />
+        <Kpi label="A-MATRX accounts" value={aMatrxAccounts.toLocaleString()} />
+        <Kpi label="Both product lines" value={bothAccounts.toLocaleString()} />
+      </div>
+
+      <div className="table-card new-account-table">
+        <div className="new-account-table-heading">
+          <h2>{accountStatusLabel}</h2>
+          <span>{displayedRows.length.toLocaleString()} shown</span>
+        </div>
+        {!availableYears.length ? (
+          <SoftEmpty text="No EvoPatch or A-MATRX sales years are available in the shared ledger." />
+        ) : !displayedRows.length ? (
+          <SoftEmpty text={`No new accounts match the ${activeYear} report controls.`} />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Product line</th>
+                <th>First sale</th>
+                <th>{activeYear} sales</th>
+                <th>{analysis.previousYear} sales</th>
+                <th>Units</th>
+                <th>Documents</th>
+                <th>Sales rep / vendor</th>
+                <th>State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedRows.map((row) => (
+                <tr key={row.accountKey}>
+                  <td className="new-account-name">
+                    <strong>{row.customerName}</strong>
+                    {row.customerCode ? <small>{row.customerCode}</small> : null}
+                  </td>
+                  <td>{row.productFamilies.join(" + ")}</td>
+                  <td>{formatIsoDate(row.firstSaleDate)}</td>
+                  <td className="positive">{formatCurrency(row.currentRevenue)}</td>
+                  <td>{formatCurrency(row.previousRevenue)}</td>
+                  <td>{formatNumber(row.currentQuantity)}</td>
+                  <td>{row.documents.toLocaleString()}</td>
+                  <td>{row.salesRepVendor}</td>
+                  <td>{row.shippingState}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <p className="new-account-coverage">
+        Loaded {analysis.previousYear} {basisLabel}s: {analysis.previousCoverage
+          ? formatComparisonRange(analysis.previousCoverage)
+          : "none"}. {hasPriorYearRows
+            ? "Confirm the shared ledger contains the complete prior year before approving bonuses."
+            : "This is a provisional candidate list until prior-year rows are loaded; do not use it to approve bonuses yet."}
+      </p>
+    </section>
+  );
+}
+
 function GrowthRiskView({
   comparisonRows,
   distributorDetailRows,
@@ -3557,6 +3823,28 @@ function formatShortDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatIsoDate(value: string) {
+  if (!value) return "n/a";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function downloadCsv(fileName: string, rows: Array<Array<string | number>>) {
+  const contents = rows
+    .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
+    .join("\r\n");
+  const url = URL.createObjectURL(new Blob([contents], { type: "text/csv;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function formatComparisonRange(range: { start: string; end: string }) {

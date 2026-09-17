@@ -995,6 +995,108 @@ select[multiple] {
   text-align: right;
 }
 
+.new-account-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.new-account-report-header img {
+  width: 172px;
+  height: auto;
+}
+
+.new-account-meta,
+.new-account-coverage {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.new-account-method {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 14px;
+  border-left: 3px solid var(--gold);
+  background: #f8fbf9;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.new-account-method strong {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.new-account-controls .new-account-search {
+  flex: 1 1 230px;
+}
+
+.new-account-controls input {
+  width: 100%;
+  min-width: 210px;
+  min-height: 42px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: #252a2a;
+  background: #fff;
+}
+
+.kpi-grid.compact.new-account-kpis {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.new-account-table table {
+  min-width: 1120px;
+}
+
+.new-account-table-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.new-account-table-heading h2 {
+  margin: 0;
+}
+
+.new-account-table-heading span,
+.new-account-name small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.new-account-name {
+  min-width: 210px;
+}
+
+.new-account-name strong,
+.new-account-name small {
+  display: block;
+}
+
+.new-account-name strong {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.new-account-name small {
+  margin-top: 3px;
+}
+
+.new-account-coverage {
+  margin-top: -4px;
+}
+
 .sku-cell {
   color: var(--primary);
   font-weight: 600;
@@ -1423,6 +1525,10 @@ select[multiple] {
   .kpi-grid.compact.momentum-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .kpi-grid.compact.new-account-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 860px) {
@@ -1456,6 +1562,19 @@ select[multiple] {
   .momentum-control-bar {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .new-account-report-header,
+  .new-account-method {
+    display: grid;
+  }
+
+  .new-account-report-header img {
+    width: 150px;
+  }
+
+  .kpi-grid.compact.new-account-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .momentum-control-group,
@@ -1610,6 +1729,22 @@ select[multiple] {
 
   .overview-report {
     page: overview;
+  }
+
+  .new-account-report {
+    page: overview;
+  }
+
+  .new-account-report-header {
+    margin-bottom: 12px;
+  }
+
+  .new-account-method {
+    margin-bottom: 12px;
+  }
+
+  .new-account-coverage {
+    margin-top: 8px;
   }
 
   body.print-product-class-only .overview-report > :not(.product-class-unit-report) {

@@ -6,6 +6,8 @@ import {
   entityMomentum,
   entityPeriodComparison,
   formatCurrency,
+  newProductAccounts,
+  newProductAccountYears,
   partitionNewTransactions,
   periodComparison,
   productClassSkuUnits,
@@ -62,6 +64,133 @@ describe("currency formatting", () => {
     expect(formatCurrency(12234.24)).toBe("$12,234");
     expect(formatCurrency(3995.99)).toBe("$3,996");
     expect(formatCurrency(0)).toBe("$0");
+  });
+});
+
+describe("new EvoPatch and A-MATRX accounts", () => {
+  it("finds customers with current-year sales and no prior-year product sales", () => {
+    const rows = [
+      makeTransaction({
+        customerCode: "OLD-1",
+        customerName: "Existing Account",
+        transactionDate: "2025-04-10",
+        revenue: 800
+      }),
+      makeTransaction({
+        customerCode: "OLD-1",
+        customerName: "Existing Account",
+        transactionDate: "2026-02-10",
+        revenue: 1200
+      }),
+      makeTransaction({
+        customerCode: "NEW-1",
+        customerName: "New Combined Account",
+        transactionDate: "2025-05-01",
+        sku: "DBM-1",
+        productDescription: "DBM Putty",
+        productClass: "Demineralized Bone Matrix",
+        revenue: 500
+      }),
+      makeTransaction({
+        customerCode: "NEW-1",
+        customerName: "New Combined Account",
+        transactionDate: "2026-03-01",
+        documentNumber: "EV-NEW-1",
+        revenue: 1500,
+        quantity: 2,
+        salesRepVendor: "Rep One"
+      }),
+      makeTransaction({
+        customerCode: "NEW-1",
+        customerName: "New Combined Account LLC",
+        transactionDate: "2026-03-04",
+        documentNumber: "EV-NEW-2",
+        sku: "EAF-40",
+        productDescription: "A-MATRX 40mg",
+        productClass: "Other",
+        revenue: 495,
+        quantity: 1,
+        salesRepVendor: "Rep One"
+      }),
+      makeTransaction({
+        customerCode: "OFFSET-1",
+        customerName: "Prior Offset Account",
+        transactionDate: "2025-06-01",
+        documentNumber: "EV-OFFSET-1",
+        revenue: 600
+      }),
+      makeTransaction({
+        customerCode: "OFFSET-1",
+        customerName: "Prior Offset Account",
+        transactionDate: "2025-06-15",
+        documentNumber: "CM-OFFSET-1",
+        revenue: -600,
+        quantity: -1,
+        isCreditMemo: true
+      }),
+      makeTransaction({
+        customerCode: "OFFSET-1",
+        customerName: "Prior Offset Account",
+        transactionDate: "2026-01-15",
+        revenue: 900
+      })
+    ];
+
+    const analysis = newProductAccounts(rows, 2026);
+
+    expect(newProductAccountYears(rows)).toEqual([2026, 2025]);
+    expect(analysis).toMatchObject({
+      currentYear: 2026,
+      previousYear: 2025,
+      previousCoverage: { start: "2025-04-10", end: "2025-06-15" }
+    });
+    expect(analysis.rows).toEqual([
+      expect.objectContaining({
+        accountKey: "code:new-1",
+        customerName: "New Combined Account",
+        productFamilies: ["EvoPatch", "A-MATRX"],
+        firstSaleDate: "2026-03-01",
+        currentRevenue: 1995,
+        previousRevenue: 0,
+        currentQuantity: 3,
+        documents: 2,
+        salesRepVendor: "Rep One"
+      })
+    ]);
+  });
+
+  it("can evaluate eligibility by created date", () => {
+    const backdated = makeTransaction({
+      customerCode: "CREATED-1",
+      customerName: "Created Date Account",
+      transactionDate: "2025-12-31",
+      dateCreated: "2026-01-02T07:00:00.000Z",
+      revenue: 1000
+    });
+
+    expect(newProductAccounts([backdated], 2026, "transaction").rows).toEqual([]);
+    expect(newProductAccounts([backdated], 2026, "created").rows).toEqual([
+      expect.objectContaining({ customerName: "Created Date Account", firstSaleDate: "2026-01-02" })
+    ]);
+  });
+
+  it("uses an unambiguous customer name to bridge a missing legacy customer code", () => {
+    const rows = [
+      makeTransaction({
+        customerCode: undefined,
+        customerName: "Legacy Account",
+        transactionDate: "2025-08-12",
+        revenue: 800
+      }),
+      makeTransaction({
+        customerCode: "LEGACY-1",
+        customerName: "Legacy Account",
+        transactionDate: "2026-02-04",
+        revenue: 1200
+      })
+    ];
+
+    expect(newProductAccounts(rows, 2026).rows).toEqual([]);
   });
 });
 

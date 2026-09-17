@@ -228,6 +228,30 @@ const productFamilySkuCatalog: Record<string, readonly string[]> = {
 };
 
 const aMatrxSkus = new Set(productFamilySkuCatalog["A-MATRX"]);
+export const newAccountProductFamilies = ["EvoPatch", "A-MATRX"] as const;
+export type NewAccountProductFamily = (typeof newAccountProductFamilies)[number];
+
+export type NewProductAccountRow = {
+  accountKey: string;
+  customerCode: string | undefined;
+  customerName: string;
+  productFamilies: NewAccountProductFamily[];
+  firstSaleDate: string;
+  currentRevenue: number;
+  previousRevenue: number;
+  currentQuantity: number;
+  documents: number;
+  salesRepVendor: string;
+  shippingState: string;
+};
+
+export type NewProductAccountAnalysis = {
+  currentYear: number;
+  previousYear: number;
+  currentCoverage?: { start: string; end: string };
+  previousCoverage?: { start: string; end: string };
+  rows: NewProductAccountRow[];
+};
 
 export function productFamily(row: SalesTransaction) {
   const sku = row.sku.trim().toUpperCase();
@@ -263,6 +287,142 @@ export function skuOptionsForProductFamilies(rows: SalesTransaction[], families:
 
   return Array.from(new Set([...catalogSkus, ...transactionSkus]))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+export function newProductAccountYears(
+  rows: SalesTransaction[],
+  dateBasis: DateBasis = "transaction"
+) {
+  return Array.from(
+    new Set(
+      rows
+        .filter((row) => isNewAccountProductFamily(productFamily(row)))
+        .map((row) => Number(salesDate(row, dateBasis).slice(0, 4)))
+        .filter(Number.isInteger)
+    )
+  ).sort((a, b) => b - a);
+}
+
+export function newProductAccounts(
+  rows: SalesTransaction[],
+  currentYear: number,
+  dateBasis: DateBasis = "transaction"
+): NewProductAccountAnalysis {
+  const previousYear = currentYear - 1;
+  const relevantRows = rows.filter((row) => {
+    if (!isNewAccountProductFamily(productFamily(row))) return false;
+    const year = Number(salesDate(row, dateBasis).slice(0, 4));
+    return year === currentYear || year === previousYear;
+  });
+  const codesByNormalizedName = new Map<string, Set<string>>();
+  relevantRows.forEach((row) => {
+    const customerCode = row.customerCode?.trim();
+    const normalizedName = row.customerName.trim().toLowerCase();
+    if (!customerCode || !normalizedName) return;
+    const codes = codesByNormalizedName.get(normalizedName) ?? new Set<string>();
+    codes.add(customerCode);
+    codesByNormalizedName.set(normalizedName, codes);
+  });
+  const accounts = new Map<
+    string,
+    {
+      customerCode?: string;
+      currentRows: SalesTransaction[];
+      previousRows: SalesTransaction[];
+    }
+  >();
+
+  relevantRows.forEach((row) => {
+    const year = Number(salesDate(row, dateBasis).slice(0, 4));
+    const normalizedName = row.customerName.trim().toLowerCase();
+    const matchingCodes = codesByNormalizedName.get(normalizedName);
+    const inferredCustomerCode = matchingCodes?.size === 1
+      ? Array.from(matchingCodes)[0]
+      : undefined;
+    const customerCode = row.customerCode?.trim() || inferredCustomerCode;
+    const accountKey = customerCode
+      ? `code:${customerCode.toLowerCase()}`
+      : `name:${normalizedName}`;
+    const account = accounts.get(accountKey) ?? {
+      customerCode,
+      currentRows: [],
+      previousRows: []
+    };
+    (year === currentYear ? account.currentRows : account.previousRows).push(row);
+    accounts.set(accountKey, account);
+  });
+
+  const accountRows = Array.from(accounts, ([accountKey, account]) => {
+    const currentRevenue = sum(account.currentRows, "revenue");
+    const previousRevenue = sum(account.previousRows, "revenue");
+    const previousPositiveSales = account.previousRows.reduce(
+      (total, row) => total + Math.max(0, row.revenue),
+      0
+    );
+    if (
+      currentRevenue <= 0 ||
+      Math.abs(previousRevenue) >= 0.005 ||
+      previousPositiveSales >= 0.005
+    ) {
+      return undefined;
+    }
+
+    const familyRevenue = new Map<NewAccountProductFamily, number>();
+    account.currentRows.forEach((row) => {
+      const family = productFamily(row);
+      if (!isNewAccountProductFamily(family)) return;
+      familyRevenue.set(family, (familyRevenue.get(family) ?? 0) + row.revenue);
+    });
+    const productFamilies = newAccountProductFamilies.filter(
+      (family) => (familyRevenue.get(family) ?? 0) > 0
+    );
+    const positiveSaleDates = account.currentRows
+      .filter((row) => row.revenue > 0)
+      .map((row) => salesDate(row, dateBasis))
+      .filter(Boolean)
+      .sort();
+    const customerName = topByRevenue(account.currentRows, "customerName", 1)[0]?.name
+      ?? account.currentRows[0]?.customerName
+      ?? "Unassigned customer";
+
+    return {
+      accountKey,
+      customerCode: account.customerCode,
+      customerName,
+      productFamilies,
+      firstSaleDate: positiveSaleDates[0] ?? "",
+      currentRevenue,
+      previousRevenue,
+      currentQuantity: sum(account.currentRows, "quantity"),
+      documents: new Set(
+        account.currentRows.map((row) => row.documentNumber || `${row.sourceFile}:${row.sourceRowNumber}`)
+      ).size,
+      salesRepVendor: topByRevenue(account.currentRows, "salesRepVendor", 1)[0]?.name ?? "Unassigned",
+      shippingState: topByRevenue(account.currentRows, "shippingState", 1)[0]?.name ?? "Unassigned"
+    } satisfies NewProductAccountRow;
+  }).filter((row): row is NewProductAccountRow => Boolean(row));
+
+  return {
+    currentYear,
+    previousYear,
+    currentCoverage: loadedYearCoverage(rows, currentYear, dateBasis),
+    previousCoverage: loadedYearCoverage(rows, previousYear, dateBasis),
+    rows: accountRows.sort(
+      (a, b) => b.firstSaleDate.localeCompare(a.firstSaleDate) || b.currentRevenue - a.currentRevenue
+    )
+  };
+}
+
+function isNewAccountProductFamily(value: string): value is NewAccountProductFamily {
+  return (newAccountProductFamilies as readonly string[]).includes(value);
+}
+
+function loadedYearCoverage(rows: SalesTransaction[], year: number, dateBasis: DateBasis) {
+  const dates = rows
+    .map((row) => salesDate(row, dateBasis))
+    .filter((date) => date.startsWith(`${year}-`))
+    .sort();
+  return dates.length ? { start: dates[0], end: dates[dates.length - 1] } : undefined;
 }
 
 export function withoutShippingStateFilter(filters: DashboardFilters): DashboardFilters {
