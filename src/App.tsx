@@ -1,3 +1,4 @@
+import { affiliationOptions, affiliationValues, enrichPurchasingAffiliations, loadPurchasingMapping, type PurchasingMapping } from "./lib/purchasingAffiliations";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -143,6 +144,9 @@ export function App() {
       : loadStored(storageKeys.ledger, createEmptyImportLedger())
   );
   const [filters, setFilters] = useState<DashboardFilters>(emptyFilters);
+  const [purchasingMapping, setPurchasingMapping] = useState<PurchasingMapping | null>(null);
+  const [purchasingError, setPurchasingError] = useState("");
+  const [purchasingRetry, setPurchasingRetry] = useState(0);
   const [activeView, setActiveView] = useState("overview");
   const [trendGrain, setTrendGrain] = useState<TimeSeriesGrain>("month");
   const [repMappings, setRepMappings] = useState<SalesRepMapping[]>(() =>
@@ -181,6 +185,19 @@ export function App() {
   const netlifyIdentityEnabled = shouldUseNetlifyIdentity();
   const sharedLedgerEnabled = shouldUseSharedLedger();
   const canManageSalesData = currentUser?.role === "administrator";
+
+  useEffect(() => {
+    let cancelled = false;
+    setPurchasingMapping(null);
+    setPurchasingError("");
+    if (!currentUser) return;
+    loadPurchasingMapping().then((mapping) => {
+      if (!cancelled) setPurchasingMapping(mapping);
+    }).catch((error: Error) => {
+      if (!cancelled) setPurchasingError(error.message);
+    });
+    return () => { cancelled = true; };
+  }, [currentUser?.id, purchasingRetry]);
 
   useEffect(() => {
     if (sharedLedgerEnabled) {
@@ -345,8 +362,8 @@ export function App() {
   }, [currentUser, sharedLedgerEnabled, syncSharedLedger]);
 
   const enriched = useMemo(
-    () => applyEnrichments(transactions, repMappings, skuEnrichments),
-    [transactions, repMappings, skuEnrichments]
+    () => enrichPurchasingAffiliations(applyEnrichments(transactions, repMappings, skuEnrichments), purchasingMapping),
+    [transactions, repMappings, skuEnrichments, purchasingMapping]
   );
   const filtered = useMemo(() => applyFilters(enriched, filters), [enriched, filters]);
   const comparisonRows = useMemo(
@@ -752,12 +769,15 @@ export function App() {
         {importMessage ? <div className="status-strip">{importMessage}</div> : null}
 
         {activeView !== "new-accounts" ? (
+          <>
           <FilterPanel
             rows={enriched}
             filters={filters}
             setFilters={setFilters}
             selectedRange={selectedRange}
           />
+        <PurchasingEvidence rows={filtered} mapping={purchasingMapping} error={purchasingError} onRetry={() => setPurchasingRetry((value) => value + 1)} />
+          </>
         ) : null}
 
         {activeView === "users" ? (
@@ -1376,6 +1396,11 @@ function FilterPanel({
           onChange={(values) => set("transactionType", values)}
         />
       </div>
+      <div className="filter-row">
+        <MultiSelect label="National GPO" values={filters.nationalGpo} options={affiliationOptions(rows, "nationalGpo")} onChange={(values) => set("nationalGpo", values)} />
+        <MultiSelect label="Regional purchasing group" values={filters.regionalPurchasingGroup} options={affiliationOptions(rows, "regionalPurchasingGroup")} onChange={(values) => set("regionalPurchasingGroup", values)} />
+        <MultiSelect label="Verification status" values={filters.verificationStatus} options={affiliationOptions(rows, "verificationStatus")} onChange={(values) => set("verificationStatus", values)} />
+      </div>
       </div>
     </section>
   );
@@ -1394,7 +1419,10 @@ type HeaderFilterOption = {
     | "sku"
     | "customerName"
     | "shippingState"
-    | "transactionType";
+    | "transactionType"
+    | "nationalGpo"
+    | "regionalPurchasingGroup"
+    | "verificationStatus";
   value: string;
   label: string;
 };
@@ -1469,6 +1497,9 @@ function GlobalFilterSearch({
         value,
         label: value
       })),
+      ...affiliationOptions(rows, "nationalGpo").map((value) => ({ type: "National GPO", key: "nationalGpo" as const, value, label: value })),
+      ...affiliationOptions(rows, "regionalPurchasingGroup").map((value) => ({ type: "Regional purchasing group", key: "regionalPurchasingGroup" as const, value, label: value })),
+      ...affiliationOptions(rows, "verificationStatus").map((value) => ({ type: "Verification status", key: "verificationStatus" as const, value, label: value })),
       ...optionValues(rows, "transactionType").map((value) => ({
         type: "Transaction type",
         key: "transactionType" as const,
@@ -1527,6 +1558,8 @@ function GlobalFilterSearch({
       setFilters({ ...filters, sku: addUnique(filters.sku, option.value) });
     } else if (option.key === "customerName") {
       setFilters({ ...filters, customerName: addUnique(filters.customerName, option.value) });
+    } else if (option.key === "nationalGpo" || option.key === "regionalPurchasingGroup" || option.key === "verificationStatus") {
+      setFilters({ ...filters, [option.key]: addUnique(filters[option.key], option.value) });
     } else if (option.key === "shippingState") {
       setFilters({ ...filters, shippingState: addUnique(filters.shippingState, option.value) });
     } else {
@@ -1929,6 +1962,9 @@ function overviewFilterSummary(filters: DashboardFilters) {
     ["Product class", filters.productClass],
     ["SKU", filters.sku],
     ["Customer", filters.customerName],
+    ["National GPO", filters.nationalGpo],
+    ["Regional purchasing group", filters.regionalPurchasingGroup],
+    ["Verification status", filters.verificationStatus],
     ["State", filters.shippingState],
     ["Transaction type", filters.transactionType]
   ];
@@ -3900,4 +3936,40 @@ function combineQualityRanges(quality: ImportQualitySummary[]) {
   if (!dates.length) return undefined;
   const sorted = dates.sort();
   return { start: sorted[0], end: sorted[sorted.length - 1] };
+}
+
+function PurchasingEvidence({ rows, mapping, error, onRetry }: {
+  rows: SalesTransaction[];
+  mapping: PurchasingMapping | null;
+  error: string;
+  onRetry: () => void;
+}) {
+  const accounts = [...new Map(rows.map((row) => [`${row.customerName}|${row.shippingState ?? ""}`, row])).values()]
+    .sort((a, b) => a.customerName.localeCompare(b.customerName));
+  if (error) return <div className="purchasing-evidence" role="alert">{error} <button type="button" onClick={onRetry}>Retry</button></div>;
+  if (!mapping) return <p className="purchasing-evidence" role="status">Loading purchasing affiliation research…</p>;
+  return <details className="purchasing-evidence">
+    <summary>Purchasing affiliation evidence · {accounts.length} account / state records · reviewed {mapping.checked}</summary>
+    <p>GPO selections include provisional leads. Use verification status to narrow the evidence. Unknown means no national or regional affiliation identified; it does not mean no membership. Affiliations do not establish product contract eligibility.</p>
+    <p>{mapping.coverage} Category-only relationships remain in notes and are excluded from the national GPO filter.</p>
+    <div className="table-wrap"><table>
+      <thead><tr><th>Customer / state</th><th>National GPO</th><th>Regional purchasing group</th><th>Verification status</th><th>Evidence</th></tr></thead>
+      <tbody>{accounts.map((row) => {
+        const entry = row.purchasingAffiliation;
+        return <tr key={`${row.customerName}|${row.shippingState ?? ""}`}>
+          <td>{row.customerName}<br />{row.shippingState || "State unknown"}</td>
+          <td>{affiliationValues(row, "nationalGpo").join("; ")}</td>
+          <td>{affiliationValues(row, "regionalPurchasingGroup").join("; ")}</td>
+          <td>{affiliationValues(row, "verificationStatus")}<br />{entry?.checked}</td>
+          <td>{entry?.notes || "No matching research record for this customer and state."}
+            {entry?.sourceIds.map((id) => {
+              const source = mapping.sources[id];
+              return source ? <div key={id}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> · {source.date}</div> : null;
+            })}
+          </td>
+        </tr>;
+      })}</tbody>
+    </table></div>
+    {!accounts.length && <p>No accounts match the current filters.</p>}
+  </details>;
 }

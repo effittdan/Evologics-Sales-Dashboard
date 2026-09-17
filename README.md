@@ -84,3 +84,14 @@ SUPABASE_SERVICE_ROLE_KEY=<server-only-service-role-key>
 ```
 
 The migration creates `public.sales_dashboard_state`, enables RLS, and revokes direct `anon`/`authenticated` table access. Browser users never talk to Supabase directly; they call `/.netlify/functions/sales-ledger`, which authorizes the Netlify Identity user first.
+
+
+## Purchasing affiliation filters
+
+National GPO, regional purchasing group, and verification status are separate global multiselect filters and are available in the header filter search. Multiple selections within a field use OR; fields combine with AND. Each transaction is counted once even when its account has several possible affiliations. Clear all resets these filters along with the existing filters. Existing view-specific behavior (including the independent New Accounts view) is unchanged.
+
+The expandable purchasing evidence table follows the current filters and exposes sources, notes, and review dates. The initial 2026-09-17 research covers 167 customer names from local exports, not a reconciliation against the live ledger. Inferences, older evidence, transitions, and unresolved identities retain their research statuses. Category-only evidence is not promoted to a national GPO membership. Unknown is not a claim of no membership, and membership does not establish product contract eligibility.
+
+Backfill `data/purchasing-affiliations.json`: retain exact exported customer names, list known shipping states, maintain separate `nationalGpo` and `regionalPurchasingGroup` arrays, and update `verificationStatus`, notes, `checked`, and source references. Empty affiliation arrays display Unknown. Names match ignoring case, whitespace, and an optional CUST code; known shipping states must match. Ambiguous entries, state mismatches, and new accounts remain Not researched. Do not add fuzzy aliases without identity evidence. Mapping updates enrich existing transactions at read time; no sales reimport or ledger schema migration is required. The file is intentionally gitignored. Upload approved backfills with `npx netlify-cli blobs:set purchasing-affiliations current --input data/purchasing-affiliations.json`. The site-scoped private store survives deployments; no code deployment is needed for research-only updates.
+
+Production reads the mapping from the private, site-scoped Netlify Blobs store `purchasing-affiliations`, key `current`, and serves it through the approved-user-only `/api/purchasing-affiliations` Netlify function with no-store caching. Keep the approved account policy aligned with the existing authenticated endpoints. The mapping must never be imported into client code or copied into public/. Vite supplies the same endpoint only during local development. Fetch failures show an explicit retry message rather than claiming the research loaded.

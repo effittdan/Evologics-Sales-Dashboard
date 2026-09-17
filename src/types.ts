@@ -6,6 +6,7 @@ export type SalesTransaction = {
   sourceReportType: SourceReportType;
   sourceSheetName?: string;
   sourceRowNumber: number;
+  purchasingAffiliation?: import("./lib/purchasingAffiliations").PurchasingAffiliation;
   customerRaw: string;
   customerCode?: string;
   customerName: string;

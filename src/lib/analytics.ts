@@ -1,3 +1,4 @@
+import { affiliationValues, type AffiliationFilterKey } from "./purchasingAffiliations";
 import type {
   ImportLedger,
   ImportQualitySummary,
@@ -18,6 +19,9 @@ export type DatePreset =
 export type DateBasis = "transaction" | "created";
 
 export type DashboardFilters = {
+  nationalGpo: string[];
+  regionalPurchasingGroup: string[];
+  verificationStatus: string[];
   datePreset: DatePreset;
   dateBasis: DateBasis;
   customStart?: string;
@@ -34,6 +38,9 @@ export type DashboardFilters = {
 };
 
 export const emptyFilters: DashboardFilters = {
+  nationalGpo: [],
+  regionalPurchasingGroup: [],
+  verificationStatus: [],
   datePreset: "all",
   dateBasis: "created",
   salesRepVendor: [],
@@ -166,6 +173,9 @@ export function applyFilters(rows: SalesTransaction[], filters: DashboardFilters
     if (!matches(row.customerName, filters.customerName)) return false;
     if (!matches(row.shippingState, filters.shippingState)) return false;
     if (!matches(row.transactionType, filters.transactionType)) return false;
+    for (const key of ["nationalGpo", "regionalPurchasingGroup", "verificationStatus"] as AffiliationFilterKey[]) {
+      if (filters[key].length && !affiliationValues(row, key).some((value) => filters[key].includes(value))) return false;
+    }
     return true;
   });
 }

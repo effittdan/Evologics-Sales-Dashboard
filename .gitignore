@@ -12,3 +12,6 @@ dist/
 *.tsv
 *.xml
 !tests/fixtures/**
+
+# Private customer research; production copy lives in Netlify Blobs.
+data/purchasing-affiliations.json

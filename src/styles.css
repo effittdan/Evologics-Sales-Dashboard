@@ -1906,3 +1906,17 @@ select[multiple] {
     padding: 5px 4px;
   }
 }
+
+.purchasing-evidence {
+  padding: 14px 18px;
+  margin: 0 0 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.purchasing-evidence summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+.purchasing-evidence p { max-width: 100ch; line-height: 1.5; }
+.purchasing-evidence td { white-space: normal; min-width: 145px; vertical-align: top; }
+.purchasing-evidence td:last-child { min-width: 300px; }
+.purchasing-evidence a { color: var(--primary); text-decoration: underline; }
