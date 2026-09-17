@@ -1920,3 +1920,19 @@ select[multiple] {
 .purchasing-evidence td { white-space: normal; min-width: 145px; vertical-align: top; }
 .purchasing-evidence td:last-child { min-width: 300px; }
 .purchasing-evidence a { color: var(--primary); text-decoration: underline; }
+
+.gpo-business-summary {
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.gpo-business-summary h2 { margin: 0 0 12px; font-size: 18px; color: var(--primary); }
+.gpo-business-summary p { margin: 8px 0; font-size: 13px; line-height: 1.5; }
+.gpo-business-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.gpo-business-summary summary { cursor: pointer; color: var(--primary); font-size: 13px; font-weight: 600; }
+.gpo-business-table { overflow-x: auto; margin-top: 12px; }
+.gpo-business-table tfoot { font-weight: 600; background: var(--surface-warm); }
+@media (max-width: 900px) { .gpo-business-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .gpo-business-metrics { grid-template-columns: 1fr; } }

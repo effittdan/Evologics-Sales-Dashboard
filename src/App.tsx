@@ -1,3 +1,4 @@
+import { GpoBusinessSummary } from "./components/GpoBusinessSummary";
 import { affiliationOptions, affiliationValues, enrichPurchasingAffiliations, loadPurchasingMapping, type PurchasingMapping } from "./lib/purchasingAffiliations";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -776,6 +777,7 @@ export function App() {
             setFilters={setFilters}
             selectedRange={selectedRange}
           />
+        <GpoBusinessSummary rows={filtered} filters={filters} ready={Boolean(purchasingMapping) && !purchasingError} />
         <PurchasingEvidence rows={filtered} mapping={purchasingMapping} error={purchasingError} onRetry={() => setPurchasingRetry((value) => value + 1)} />
           </>
         ) : null}
