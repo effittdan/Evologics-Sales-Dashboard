@@ -97,3 +97,15 @@ Backfill `data/purchasing-affiliations.json`: retain exact exported customer nam
 Production reads the mapping from the private, site-scoped Netlify Blobs store `purchasing-affiliations`, key `current`, and serves it through the approved-user-only `/api/purchasing-affiliations` Netlify function with no-store caching. Keep the approved account policy aligned with the existing authenticated endpoints. The mapping must never be imported into client code or copied into public/. Vite supplies the same endpoint only during local development. Fetch failures show an explicit retry message rather than claiming the research loaded.
 
 Selecting a national or regional purchasing group also shows Combined GPO business: net sales, net units, accounts with business, and sales lines across all matching members. Expand account contributions to see every account and the combined total (not a top-N subset). Totals respect the date range and other active filters, include signed credits, and count each sales line once. When both national and regional fields are selected, accounts must match both fields. Provisional research remains subject to verification status.
+
+## Prospect Account Review
+
+Prospect Review is an internal, pre-onboarding comparison for a prospective rep or distributor's current book of business. It accepts `.xlsx` or `.csv` account lists with Sold-To and Ship-To names, preserves source relationships and row references, and compares them with the complete normalized sales ledger independently of the global dashboard filters.
+
+Results are intentionally limited to three evidence states:
+
+- **Sales overlap**: an exact normalized facility-name and compatible-state match has transaction history in the loaded ledger.
+- **Needs identity review**: a similar name or conflicting state requires a person to confirm the customer identity.
+- **No matching sales**: the loaded transaction history contains no matching customer name. This is not proof that a zero-sales, inactive, or otherwise omitted NetSuite customer record does not exist.
+
+The uploaded prospect list remains in the browser and is not saved to the shared sales ledger. Prospect Review does not create users, assign accounts, change distributor rights, or start onboarding. Exported CSV results are a review aid only. A future customer-directory integration can distinguish an existing zero-sales NetSuite customer from a genuinely new facility.

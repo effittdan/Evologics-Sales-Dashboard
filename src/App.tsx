@@ -1,3 +1,4 @@
+import { AccountOverlapView } from "./components/AccountOverlapView";
 import { GpoBusinessSummary } from "./components/GpoBusinessSummary";
 import { affiliationOptions, affiliationValues, enrichPurchasingAffiliations, loadPurchasingMapping, type PurchasingMapping } from "./lib/purchasingAffiliations";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -5,6 +6,7 @@ import {
   ArrowLeft,
   AlertTriangle,
   BarChart3,
+  ClipboardCheck,
   Database,
   Download,
   FileUp,
@@ -684,6 +686,9 @@ export function App() {
           <NavButton icon={<UserPlus />} id="new-accounts" active={activeView} onClick={setActiveView}>
             New Accounts
           </NavButton>
+          <NavButton icon={<ClipboardCheck />} id="account-overlap" active={activeView} onClick={setActiveView}>
+            Prospect Review
+          </NavButton>
           <NavButton icon={<TrendingUp />} id="momentum" active={activeView} onClick={setActiveView}>
             Growth & Risk
           </NavButton>
@@ -707,12 +712,14 @@ export function App() {
             <p className="subtle">
               {activeView === "new-accounts"
                 ? `${enriched.length.toLocaleString()} normalized line items available for eligibility review`
+                : activeView === "account-overlap"
+                  ? `${enriched.length.toLocaleString()} normalized line items available for prospect account comparison`
                 : `${filtered.length.toLocaleString()} of ${enriched.length.toLocaleString()} normalized line items${filteredRange
                     ? ` | active ${filters.dateBasis === "created" ? "created dates" : "transaction dates"} ${filteredRange.start} to ${filteredRange.end}`
                     : ""}`}
             </p>
           </div>
-          {activeView !== "new-accounts" ? (
+          {!(["new-accounts", "account-overlap"] as string[]).includes(activeView) ? (
             <GlobalFilterSearch
               rows={enriched}
               filters={filters}
@@ -769,7 +776,7 @@ export function App() {
         {sharedLedgerMessage ? <div className="status-strip">{sharedLedgerMessage}</div> : null}
         {importMessage ? <div className="status-strip">{importMessage}</div> : null}
 
-        {activeView !== "new-accounts" ? (
+        {!(["new-accounts", "account-overlap"] as string[]).includes(activeView) ? (
           <>
           <FilterPanel
             rows={enriched}
@@ -843,6 +850,9 @@ export function App() {
             )}
             {activeView === "new-accounts" && (
               <NewAccountsView rows={enriched} sourceUpdatedAt={sharedLedgerMeta?.updatedAt} />
+            )}
+            {activeView === "account-overlap" && (
+              <AccountOverlapView rows={enriched} sourceUpdatedAt={sharedLedgerMeta?.updatedAt} />
             )}
             {activeView === "momentum" && (
               <GrowthRiskView
@@ -3949,9 +3959,9 @@ function PurchasingEvidence({ rows, mapping, error, onRetry }: {
   const accounts = [...new Map(rows.map((row) => [`${row.customerName}|${row.shippingState ?? ""}`, row])).values()]
     .sort((a, b) => a.customerName.localeCompare(b.customerName));
   if (error) return <div className="purchasing-evidence" role="alert">{error} <button type="button" onClick={onRetry}>Retry</button></div>;
-  if (!mapping) return <p className="purchasing-evidence" role="status">Loading purchasing affiliation research…</p>;
+  if (!mapping) return <p className="purchasing-evidence" role="status">Loading purchasing affiliation researchâ€¦</p>;
   return <details className="purchasing-evidence">
-    <summary>Purchasing affiliation evidence · {accounts.length} account / state records · reviewed {mapping.checked}</summary>
+    <summary>Purchasing affiliation evidence Â· {accounts.length} account / state records Â· reviewed {mapping.checked}</summary>
     <p>GPO selections include provisional leads. Use verification status to narrow the evidence. Unknown means no national or regional affiliation identified; it does not mean no membership. Affiliations do not establish product contract eligibility.</p>
     <p>{mapping.coverage} Category-only relationships remain in notes and are excluded from the national GPO filter.</p>
     <div className="table-wrap"><table>
@@ -3966,7 +3976,7 @@ function PurchasingEvidence({ rows, mapping, error, onRetry }: {
           <td>{entry?.notes || "No matching research record for this customer and state."}
             {entry?.sourceIds.map((id) => {
               const source = mapping.sources[id];
-              return source ? <div key={id}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> · {source.date}</div> : null;
+              return source ? <div key={id}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> Â· {source.date}</div> : null;
             })}
           </td>
         </tr>;

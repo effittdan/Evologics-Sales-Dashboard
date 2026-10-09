@@ -1936,3 +1936,313 @@ select[multiple] {
 .gpo-business-table tfoot { font-weight: 600; background: var(--surface-warm); }
 @media (max-width: 900px) { .gpo-business-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .gpo-business-metrics { grid-template-columns: 1fr; } }
+
+.overlap-review {
+  gap: 18px;
+}
+
+.overlap-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.overlap-intro.compact {
+  padding-top: 4px;
+}
+
+.overlap-intro h2,
+.overlap-upload-panel h3 {
+  margin: 0 0 8px;
+  color: var(--primary);
+}
+
+.overlap-intro h2 {
+  font-size: 24px;
+}
+
+.overlap-intro svg {
+  flex: 0 0 auto;
+  color: var(--secondary);
+}
+
+.overlap-upload-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.overlap-upload-panel p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.overlap-upload-button {
+  flex: 0 0 auto;
+}
+
+.overlap-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 4px 0;
+}
+
+.overlap-rule-grid > div {
+  padding-left: 14px;
+  border-left: 3px solid var(--border);
+}
+
+.overlap-rule-grid > div:first-child {
+  border-left-color: var(--primary);
+}
+
+.overlap-rule-grid > div:nth-child(2) {
+  border-left-color: var(--gold);
+}
+
+.overlap-rule-grid strong,
+.overlap-rule-grid span {
+  display: block;
+}
+
+.overlap-rule-grid span {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.error-strip {
+  border-left-color: #a63f3f;
+  color: #7a2f2f;
+}
+
+.overlap-toolbar {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.overlap-source {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.overlap-source strong {
+  color: var(--primary);
+}
+
+.overlap-source span,
+.overlap-shown {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.overlap-caution {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 14px;
+  padding: 13px 16px;
+  border-left: 3px solid var(--gold);
+  background: var(--surface-warm);
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.kpi-grid.compact.overlap-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.overlap-kpi-button {
+  width: 100%;
+  min-height: 98px;
+  border-color: var(--border);
+  text-align: left;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.overlap-kpi-button:hover,
+.overlap-kpi-button.active {
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 2px rgba(79, 125, 109, 0.16);
+}
+
+.overlap-kpi-button.active {
+  background: #f5f9f7;
+}
+
+.overlap-controls {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(280px, 1.3fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.overlap-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.overlap-controls input,
+.overlap-controls select {
+  width: 100%;
+}
+
+.search-input-wrap {
+  position: relative;
+  display: block;
+}
+
+.search-input-wrap svg {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  color: var(--muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.search-input-wrap input {
+  padding-left: 38px;
+}
+
+.overlap-shown {
+  padding-bottom: 12px;
+  white-space: nowrap;
+}
+
+.overlap-table {
+  overflow-x: auto;
+}
+
+.overlap-table table {
+  min-width: 1180px;
+}
+
+.overlap-table th,
+.overlap-table td {
+  vertical-align: top;
+}
+
+.overlap-table td {
+  white-space: normal;
+}
+
+.overlap-table small,
+.overlap-reason,
+.overlap-value-list small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.overlap-account-cell {
+  min-width: 230px;
+}
+
+.overlap-account-cell strong,
+.overlap-table td:nth-child(3) strong {
+  color: var(--primary);
+}
+
+.overlap-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.overlap-badge.sales-overlap {
+  border-color: #91b7a5;
+  background: #edf7f1;
+  color: #285e4d;
+}
+
+.overlap-badge.possible-overlap {
+  border-color: #d5c18f;
+  background: #faf5e8;
+  color: #6f5a25;
+}
+
+.overlap-badge.no-sales-found {
+  background: #f3f5f4;
+  color: #59665f;
+}
+
+.overlap-value-list {
+  display: block;
+  min-width: 150px;
+}
+
+@media (max-width: 900px) {
+  .overlap-upload-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .overlap-rule-grid,
+  .kpi-grid.compact.overlap-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overlap-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .overlap-shown {
+    padding: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .overlap-intro,
+  .overlap-toolbar,
+  .overlap-caution {
+    grid-template-columns: 1fr;
+  }
+
+  .overlap-intro,
+  .overlap-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .overlap-rule-grid,
+  .kpi-grid.compact.overlap-kpis,
+  .overlap-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .overlap-toolbar button,
+  .overlap-upload-button {
+    width: 100%;
+  }
+}
