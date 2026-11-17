@@ -1,8 +1,8 @@
 import React, {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Overview} from '../src/App';
-import {applyFilters,emptyFilters,kpis} from '../src/lib/analytics';
-import type {SalesTransaction,DashboardFilters} from '../src/types';
+import {applyFilters,emptyFilters,kpis,type DashboardFilters} from '../src/lib/analytics';
+import type {SalesTransaction} from '../src/types';
 import '../src/styles.css';
 const data:SalesTransaction[]=Array.from({length:24},(_,i)=>({
   customerName:'Synthetic hospital',customerRaw:'Synthetic hospital',sourceFile:'synthetic.csv',sourceReportType:'YTD',sourceRowNumber:i+1,
