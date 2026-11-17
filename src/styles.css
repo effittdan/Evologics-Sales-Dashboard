@@ -1679,6 +1679,18 @@ select[multiple] {
   }
 }
 
+.pdf-export-control { display: grid; gap: 6px; justify-items: end; }
+.pdf-export-message { max-width: 360px; margin: 0; font-size: 12px; }
+.pdf-export-message[role="alert"] { color: #a32121; }
+.pdf-export-stage { position: absolute; left: -16000px; top: 0; width: 1200px; background: white; pointer-events: none; }
+.pdf-export-stage > * { width: 1200px; margin: 0; padding: 16px; box-sizing: border-box; }
+.pdf-export-stage .print-only, .pdf-export-stage .product-class-print-header { display: flex !important; }
+.pdf-export-stage .no-print, .pdf-export-stage .product-class-unit-header { display: none !important; }
+.pdf-export-stage .table-card, .pdf-export-stage .table-scroll { overflow: visible !important; max-height: none !important; }
+.pdf-export-stage .overview-print-header { margin-bottom: 12px; }
+.pdf-export-stage .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pdf-export-stage .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 @media print {
   @page {
     margin: 0.35in;

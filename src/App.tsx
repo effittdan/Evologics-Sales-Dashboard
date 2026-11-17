@@ -1,4 +1,5 @@
 import { AccountOverlapView } from "./components/AccountOverlapView";
+import { PdfExportButton } from "./components/PdfExportButton";
 import { GpoBusinessSummary } from "./components/GpoBusinessSummary";
 import { affiliationOptions, affiliationValues, enrichPurchasingAffiliations, loadPurchasingMapping, type PurchasingMapping } from "./lib/purchasingAffiliations";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1721,38 +1722,10 @@ function Overview({
     }
   }, [filters.productClass, productClassOptions]);
 
-  function printOverview() {
-    const previousTitle = document.title;
-    document.title = `Evologics sales overview${range?.end ? ` through ${range.end}` : ""}`;
-    const restoreTitle = () => {
-      document.title = previousTitle;
-      window.removeEventListener("afterprint", restoreTitle);
-    };
-    window.addEventListener("afterprint", restoreTitle);
-    window.print();
-  }
-
-  function printProductClassReport() {
-    if (!selectedProductClass || !unitAnalysis.rows.length) return;
-    const previousTitle = document.title;
-    document.title = `Evologics ${selectedProductClass} units - ${unitAnalysis.currentLabel}`;
-    document.body.classList.add("print-product-class-only");
-    const restorePrintState = () => {
-      document.title = previousTitle;
-      document.body.classList.remove("print-product-class-only");
-      window.removeEventListener("afterprint", restorePrintState);
-    };
-    window.addEventListener("afterprint", restorePrintState);
-    window.print();
-  }
-
   return (
     <section className="view-stack overview-report">
       <div className="overview-export-toolbar no-print">
-        <button className="upload-button" onClick={printOverview}>
-          <Printer size={18} />
-          Export PDF
-        </button>
+        <PdfExportButton target=".overview-report" title={`Evologics sales overview${range?.end ? ` through ${range.end}` : ""}`} />
       </div>
       <div className="overview-print-header print-only">
         <div>
@@ -1863,15 +1836,11 @@ function Overview({
             <h2>Units sold by SKU</h2>
             <p className="subtle">Compare every SKU in a product class across monthly and annual periods.</p>
           </div>
-          <button
-            className="upload-button no-print"
-            type="button"
-            onClick={printProductClassReport}
+          <PdfExportButton
+            target=".product-class-unit-report"
+            title={`Evologics ${selectedProductClass} units - ${unitAnalysis.currentLabel}`}
             disabled={!selectedProductClass || !unitAnalysis.rows.length}
-          >
-            <Printer size={18} />
-            Export PDF
-          </button>
+          />
         </div>
         <div className="product-class-controls no-print">
           <label>
