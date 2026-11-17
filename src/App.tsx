@@ -1654,7 +1654,7 @@ function addUnique(values: string[], value: string) {
   return values.includes(value) ? values : [...values, value];
 }
 
-function Overview({
+export function Overview({
   rows,
   productRows,
   comparisonRows,
@@ -1708,19 +1708,18 @@ function Overview({
     [productRows, selectedProductClass, unitMode, dateBasis, activeMonth]
   );
 
+  const globalProductClass = filters.productClass.length === 1 ? filters.productClass[0] : "";
   useEffect(() => {
-    if (filters.productClass.length === 1 && productClassOptions.includes(filters.productClass[0])) {
-      setSelectedProductClass(filters.productClass[0]);
-      return;
-    }
+    // Sync only when the global product selection changes. Date/customer filters
+    // rebuild productClassOptions and must not erase a manual unit-report choice.
+    setSelectedProductClass(globalProductClass);
+  }, [globalProductClass]);
 
-    // Keep the Overview unit-analysis selector aligned with the global filter.
-    // Otherwise, "Clear all" removes the global filter but leaves the page
-    // looking locked to the previously selected product class.
-    if (filters.productClass.length === 0) {
-      setSelectedProductClass("");
-    }
-  }, [filters.productClass, productClassOptions]);
+  useEffect(() => {
+    // Clear all uses this canonical filter object, including when no global
+    // product filter was selected. Keep that explicit reset working.
+    if (filters === emptyFilters) setSelectedProductClass("");
+  }, [filters]);
 
   return (
     <section className="view-stack overview-report">
